@@ -191,6 +191,9 @@ export async function createStoreProduct(
       shortDescription: data.shortDescription || null,
       price: data.price,
       salePrice: data.salePrice ?? null,
+      // Baseline for the ±20% price-review threshold starts at the first price;
+      // it only moves when an admin approves a reviewed price change.
+      reviewBasePrice: data.price,
       unit: data.unit,
       stockQuantity: data.stockQuantity,
       // Store-created listings always need MandiBazaar approval first
@@ -324,6 +327,7 @@ export async function updateStoreProduct(
     shortDescription: product.shortDescription,
     price: toNumber(product.price),
     salePrice: product.salePrice != null ? toNumber(product.salePrice) : null,
+    reviewBasePrice: product.reviewBasePrice != null ? toNumber(product.reviewBasePrice) : null,
     images: liveImages,
   };
 

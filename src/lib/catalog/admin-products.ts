@@ -235,6 +235,9 @@ export async function handleProductAction(
         where: { id },
         data: {
           ...built.data,
+          // When a price change is approved, reset the review baseline to it so the
+          // next ±20% band is measured from the newly-approved price.
+          ...(built.data.price !== undefined ? { reviewBasePrice: built.data.price } : {}),
           pendingChanges: Prisma.DbNull,
           pendingChangesAt: null,
           moderationNote: null,

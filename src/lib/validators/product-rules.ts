@@ -321,6 +321,8 @@ export type LiveProduct = {
   shortDescription: string | null;
   price: number;
   salePrice: number | null;
+  /** Last admin-approved regular price; the review threshold compares to this. */
+  reviewBasePrice?: number | null;
   images: ProductImageRef[];
 };
 
@@ -474,7 +476,11 @@ export function planProductEdit(
       continue;
     }
     if (k === "price") {
-      if (isLargePriceChange(live.price, next as number)) {
+      // Compare against the last admin-approved baseline, not the mutable live
+      // price — otherwise repeated sub-threshold edits re-baseline each other and
+      // let the price drift past ±20% with no review.
+      const priceBase = live.reviewBasePrice ?? live.price;
+      if (isLargePriceChange(priceBase, next as number)) {
         if (!sameValue(k, next, existingPending?.price)) newlyPending.push(k);
         pending.price = next;
       } else {
