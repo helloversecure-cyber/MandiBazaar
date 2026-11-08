@@ -65,6 +65,28 @@ export async function middleware(req: NextRequest) {
   });
   const signedIn = Boolean(token?.id || token?.sub);
   const role = String(token?.role || "");
+  const mustChangePassword = Boolean(
+    (token as { mustChangePassword?: boolean } | null)?.mustChangePassword
+  );
+
+  // Temporary-password lock: a user created with a temp password (staff/rider) must
+  // change it before using anything. Hold them on the change-password screen until
+  // the flag clears (the change-password endpoint clears it).
+  const CHANGE_PW_PATH = "/account/security";
+  if (signedIn && mustChangePassword) {
+    const onChangePw = pathname === CHANGE_PW_PATH;
+    const onAuth =
+      pathname === "/login" ||
+      pathname === "/logout" ||
+      pathname.startsWith("/auth/");
+    if (!onChangePw && !onAuth) {
+      const url = req.nextUrl.clone();
+      url.pathname = CHANGE_PW_PATH;
+      url.search = "";
+      url.searchParams.set("forced", "1");
+      return NextResponse.redirect(url);
+    }
+  }
 
   // An unapproved store owner is held on the Pending Approval screen: no access
   // to the customer website or the store dashboard until MandiBazaar approves.

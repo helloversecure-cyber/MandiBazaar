@@ -47,7 +47,7 @@ export default function StoreDealsPage() {
   );
 
   const activeDeals = products.filter(
-    (p) => p.salePrice != null && p.salePrice < p.price
+    (p) => p.status === "ACTIVE" && p.salePrice != null && p.salePrice < p.price
   );
 
   const previewPct =

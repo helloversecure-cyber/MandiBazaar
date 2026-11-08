@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   User,
+  UserCog,
   Package,
   MapPin,
   Heart,
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/account", label: "Overview", icon: User, exact: true },
+  { href: "/account/profile", label: "Profile", icon: UserCog },
   { href: "/account/orders", label: "My orders", icon: Package },
   { href: "/account/addresses", label: "Addresses", icon: MapPin },
   { href: "/wishlist", label: "Wishlist", icon: Heart },

@@ -397,6 +397,15 @@ export async function DELETE(req: Request) {
     }
 
     if (resource === "category") {
+      // Don't hard-delete a category that still has products (the FK would throw a
+      // raw error) — tell the admin what to do first.
+      const inUse = await prisma.product.count({ where: { categoryId: id } });
+      if (inUse > 0) {
+        return apiError(
+          `${inUse} product${inUse === 1 ? "" : "s"} still use this category — move or archive them first, or just deactivate the category.`,
+          400
+        );
+      }
       await prisma.category.delete({ where: { id } });
       await writeAuditLog({
         userId: session.user.id,

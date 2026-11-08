@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Loader2, Download, TrendingUp, Wallet, Receipt, Percent } from "lucide-react";
 
 type Line = {
+  storeId: string;
+  storeName: string;
   orderId: string;
   orderNumber: string;
   date: string;
@@ -133,9 +135,12 @@ export default function StoreFinancePage() {
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-subtle">No orders yet.</td></tr>
               ) : (
                 data.breakdown.map((o) => (
-                  <tr key={o.orderId}>
+                  <tr key={`${o.storeId}:${o.orderId}`}>
                     <td className="px-4 py-3">
                       <div className="font-semibold text-ink">{o.orderNumber}</div>
+                      {new Set(data.breakdown.map((b) => b.storeId)).size > 1 && o.storeName && (
+                        <div className="text-xs font-medium text-brand-600">{o.storeName}</div>
+                      )}
                       <div className="text-xs text-ink-subtle">{new Date(o.date).toLocaleDateString("en-PK")}</div>
                     </td>
                     <td className="px-4 py-3"><StatusPill status={o.orderStatus} /></td>

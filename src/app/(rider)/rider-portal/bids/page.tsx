@@ -65,6 +65,10 @@ export default function RiderBidsPage() {
       setMsg((m) => ({ ...m, [reqId]: "Enter a valid fee." }));
       return;
     }
+    if (amount > 10000) {
+      setMsg((m) => ({ ...m, [reqId]: "Delivery fee can't be more than Rs 10,000." }));
+      return;
+    }
     setBusy(reqId);
     setMsg((m) => ({ ...m, [reqId]: "" }));
     try {

@@ -301,6 +301,10 @@ function SendPayment({
     setErr("");
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) { setErr("Enter a valid amount."); return; }
+    if (amt > obligation.outstanding + 0.01) {
+      setErr(`You only owe Rs ${obligation.outstanding.toLocaleString("en-PK")} on this order.`);
+      return;
+    }
     if (digital && !proofUrl) { setErr("Please attach a payment screenshot."); return; }
     setBusy(true);
     try {

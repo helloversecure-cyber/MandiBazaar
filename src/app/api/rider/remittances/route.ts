@@ -71,7 +71,14 @@ export async function POST(req: Request) {
       reference?: string;
     };
     if (!body.remittanceId) return apiError("Missing remittance.", 400);
-    if (!body.method || !VALID_METHODS.includes(body.method as RemittanceMethodName)) {
+    // Only methods the platform has enabled (same subset the GET offers), not just
+    // any valid method — a rider can't submit via a method the admin disabled.
+    const settings = await prisma.storeSettings.findFirst({ select: { remittanceMethods: true } });
+    const configured = Array.isArray(settings?.remittanceMethods)
+      ? (settings!.remittanceMethods as string[]).filter((m) => VALID_METHODS.includes(m as RemittanceMethodName))
+      : [];
+    const allowed = configured.length ? configured : VALID_METHODS;
+    if (!body.method || !allowed.includes(body.method)) {
       return apiError("Choose a valid payment method.", 400);
     }
     const result = await createRemittanceSubmission({

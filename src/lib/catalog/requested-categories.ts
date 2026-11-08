@@ -32,7 +32,14 @@ export function normalizeRequestedCategories(raw: unknown): string[] {
   return out;
 }
 
-/** Upsert active categories from free-text names. Returns newly created names. */
+/**
+ * Create any missing categories from free-text store-request names. Returns the
+ * newly created names. An EXISTING category is left exactly as the admin set it —
+ * never silently reactivated or renamed (that would override a deliberate
+ * deactivation and clobber the admin's display name). New categories are created
+ * INACTIVE with no image, matching the platform's image-to-activate rule and the
+ * admin approve dialog ("add an image before activating").
+ */
 export async function ensureCategoriesFromNames(names: string[]) {
   const normalized = normalizeRequestedCategories(names);
   const created: string[] = [];
@@ -41,15 +48,7 @@ export async function ensureCategoriesFromNames(names: string[]) {
     const slug = slugify(name);
     if (!slug) continue;
     const existing = await prisma.category.findUnique({ where: { slug } });
-    if (existing) {
-      if (!existing.isActive) {
-        await prisma.category.update({
-          where: { id: existing.id },
-          data: { isActive: true, name },
-        });
-      }
-      continue;
-    }
+    if (existing) continue; // respect the admin's existing active state + name
     const maxSort = await prisma.category.aggregate({
       _max: { sortOrder: true },
     });
@@ -57,7 +56,7 @@ export async function ensureCategoriesFromNames(names: string[]) {
       data: {
         name,
         slug,
-        isActive: true,
+        isActive: false,
         sortOrder: (maxSort._max.sortOrder || 0) + 1,
         description: `Shop ${name.toLowerCase()} from MandiBazaar stores`,
       },

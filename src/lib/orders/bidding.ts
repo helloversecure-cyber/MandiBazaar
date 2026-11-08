@@ -230,8 +230,16 @@ export async function submitBid(opts: { riderId: string; requestId: string; amou
   if (!req || req.status !== "OPEN") throw new BiddingError("CLOSED", "This delivery request is no longer open.");
   if (req.expiresAt.getTime() <= Date.now()) throw new BiddingError("EXPIRED", "This delivery request has expired.");
 
-  if (!(await isRiderEligibleForAssignment(opts.riderId))) {
-    throw new BiddingError("INELIGIBLE", "You can't bid right now. Make sure you're online and not on another delivery.");
+  const eligibility = await riderBidEligibility(opts.riderId);
+  if (!eligibility.eligible) {
+    const REASON_MSG: Record<string, string> = {
+      NOT_APPROVED: "Your rider account is still under review — you can bid once MandiBazaar approves you.",
+      SUSPENDED: "Your rider account is suspended. Please contact MandiBazaar support.",
+      OFFLINE: "You're offline. Go online from your dashboard to bid.",
+      BUSY: "You're on an active delivery. Finish it before bidding on new requests.",
+      COD_OVERDUE: "You have overdue COD cash to remit. Settle it to take new deliveries.",
+    };
+    throw new BiddingError("INELIGIBLE", REASON_MSG[eligibility.reason] || "You can't bid right now.");
   }
 
   // Dedup via @@unique([deliveryRequestId, riderId]) — one active bid per rider.

@@ -20,14 +20,17 @@ const SALE_STATUSES = [
 async function rateByStore(storeIds: string[]) {
   const [settings, stores] = await Promise.all([
     prisma.storeSettings.findFirst({ select: { platformCommissionPct: true } }),
-    prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, commissionOverride: true } }),
+    prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true, commissionOverride: true } }),
   ]);
   const def = toNumber(settings?.platformCommissionPct ?? 5);
   const map = new Map(stores.map((s) => [s.id, s.commissionOverride != null ? toNumber(s.commissionOverride) : def]));
-  return { def, map };
+  const nameMap = new Map(stores.map((s) => [s.id, s.name]));
+  return { def, map, nameMap };
 }
 
 export type StoreOrderLine = {
+  storeId: string;
+  storeName: string;
   orderId: string;
   orderNumber: string;
   date: Date;
@@ -45,7 +48,7 @@ export type StoreOrderLine = {
 };
 
 export async function storeOrderBreakdown(storeIds: string[], limit = 200): Promise<StoreOrderLine[]> {
-  const [{ def, map }, orders, payouts] = await Promise.all([
+  const [{ def, map, nameMap }, orders, payouts] = await Promise.all([
     rateByStore(storeIds),
     prisma.order.findMany({
       where: { items: { some: { storeId: { in: storeIds } } }, orderStatus: { in: [...SALE_STATUSES, "CANCELLED", "RETURNED"] } },
@@ -100,6 +103,8 @@ export async function storeOrderBreakdown(storeIds: string[], limit = 200): Prom
       const rate = isSettled ? settledRate.get(key) ?? map.get(storeId) ?? def : map.get(storeId) ?? def;
       const commission = earns ? commissionFor(gross, rate) : 0;
       return {
+        storeId,
+        storeName: nameMap.get(storeId) ?? "",
         orderId: o.id,
         orderNumber: o.orderNumber,
         date: o.createdAt,

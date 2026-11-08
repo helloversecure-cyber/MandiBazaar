@@ -42,6 +42,12 @@ export async function POST(req: Request) {
   // Verify the current password against Firebase before allowing a change.
   const check = await verifyFirebasePassword(user.email, currentPassword);
   if (!check.ok) {
+    if (check.reason === "ERROR") {
+      return apiError("Couldn't verify your password right now. Please try again.", 503);
+    }
+    if (check.reason === "DISABLED") {
+      return apiError("This account is disabled. Contact support.", 403);
+    }
     return apiFieldErrors({ currentPassword: "Current password is incorrect." });
   }
 

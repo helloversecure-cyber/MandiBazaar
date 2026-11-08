@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { formatCurrency } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Package, MapPin, Heart, Star, Lock, ArrowRight } from "lucide-react";
+import { Package, MapPin, Heart, Star, Lock, UserCog, ArrowRight } from "lucide-react";
 
 export default function AccountPage() {
   const { data: session } = useSession();
@@ -22,6 +22,7 @@ export default function AccountPage() {
   }, []);
 
   const quickLinks = [
+    { href: "/account/profile", label: "Profile", icon: UserCog, desc: "Name & mobile" },
     { href: "/account/orders", label: "Orders", icon: Package, desc: "Track & reorder" },
     { href: "/account/addresses", label: "Addresses", icon: MapPin, desc: "Delivery locations" },
     { href: "/wishlist", label: "Wishlist", icon: Heart, desc: "Saved products" },

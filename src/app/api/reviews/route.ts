@@ -9,6 +9,7 @@ import { Prisma, ReviewStatus } from "@prisma/client";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const productId = url.searchParams.get("productId");
+  const orderId = url.searchParams.get("orderId");
   const mine = url.searchParams.get("mine") === "true";
 
   // Admin moderation list (QA Q7 / R6): every status, paginated, filters.
@@ -61,12 +62,14 @@ export async function GET(req: Request) {
     const session = await getSession();
     if (!session?.user?.id) return apiError("Unauthorized", 401);
     const reviews = await prisma.review.findMany({
-      where: { userId: session.user.id },
+      // Scope to one order when given, so an order page sees ALL its reviewed
+      // items (not just the caller's 50 most recent across every order).
+      where: { userId: session.user.id, ...(orderId ? { orderId } : {}) },
       include: {
         product: { select: { id: true, name: true, slug: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: orderId ? 100 : 50,
     });
     return apiSuccess(reviews);
   }

@@ -513,9 +513,13 @@ export async function PATCH(req: Request) {
         if (amount <= 0) {
           return apiError("COD amount to collect is invalid", 400);
         }
-        if (Math.abs(amount - remaining) > 0.01 && amount < remaining) {
+        if (Math.abs(amount - remaining) > 0.01) {
+          // Reject over-collection as well as under (the COLLECT_CASH path does too),
+          // so the reported cash can't silently differ from what's owed.
           return apiError(
-            `Collect full COD amount of Rs. ${remaining.toFixed(0)} (or exact remaining)`,
+            amount > remaining
+              ? `Collect exactly Rs. ${remaining.toFixed(0)} — don't collect more than is owed`
+              : `Collect the full COD amount of Rs. ${remaining.toFixed(0)}`,
             400
           );
         }

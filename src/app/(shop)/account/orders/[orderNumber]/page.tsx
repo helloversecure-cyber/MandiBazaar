@@ -92,7 +92,7 @@ export default function OrderDetailPage() {
     const orderId = order?.id;
     if (!orderId) return;
     let cancelled = false;
-    fetch("/api/reviews?mine=true")
+    fetch(`/api/reviews?mine=true&orderId=${encodeURIComponent(orderId)}`)
       .then((r) => r.json())
       .then((d) => {
         if (cancelled || !d?.success) return;

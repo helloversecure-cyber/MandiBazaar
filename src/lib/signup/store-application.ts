@@ -139,6 +139,18 @@ export async function submitStoreApplication(req: Request) {
     }
   }
 
+  // 5b) Duplicate CNIC — parity with rider KYC (register-rider blocks a re-used CNIC).
+  // If one person is allowed to own multiple stores, remove this check.
+  if (data.cnicNumber) {
+    const cnicUsed = await prisma.store.findFirst({
+      where: { cnicNumber: data.cnicNumber },
+      select: { id: true },
+    });
+    if (cnicUsed) {
+      return apiFieldErrors({ cnicNumber: "This CNIC is already registered with a store." }, 409);
+    }
+  }
+
   // 6) New owner account via Firebase (signed-in users already have an account)
   let ownerUid: string | null = null;
   if (owner) {

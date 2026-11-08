@@ -1,13 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
-import { Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Lock, Eye, EyeOff, CheckCircle2, AlertTriangle } from "lucide-react";
 
 type Errors = Partial<Record<"currentPassword" | "newPassword" | "confirmPassword", string>>;
 
+/** Mirror of zPassword (pk.ts): 8–64 chars, at least one letter and one number. */
+function passwordError(v: string): string | null {
+  if (v.length < 8 || v.length > 64 || !/[A-Za-z]/.test(v) || !/\d/.test(v)) {
+    return "Password must be 8–64 characters with at least one letter and one number";
+  }
+  return null;
+}
+
 export default function SecurityPage() {
+  const forced = useSearchParams().get("forced") === "1";
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -22,6 +32,20 @@ export default function SecurityPage() {
     setErrors({});
     setFormError("");
     setDone(false);
+
+    // Client-side checks first, so obvious mistakes don't need a round-trip.
+    const clientErrors: Errors = {};
+    if (!currentPassword) clientErrors.currentPassword = "Enter your current password";
+    const pwErr = passwordError(newPassword);
+    if (pwErr) clientErrors.newPassword = pwErr;
+    else if (newPassword === currentPassword)
+      clientErrors.newPassword = "Choose a new password different from the current one";
+    if (confirmPassword !== newPassword) clientErrors.confirmPassword = "Passwords do not match";
+    if (Object.keys(clientErrors).length) {
+      setErrors(clientErrors);
+      return;
+    }
+
     setBusy(true);
     try {
       const res = await fetch("/api/auth/change-password", {
@@ -72,6 +96,13 @@ export default function SecurityPage() {
   return (
     <div>
       <PageHeader title="Password" subtitle="Change the password you use to sign in." />
+
+      {forced && !done && (
+        <div className="mx-auto mb-4 flex max-w-md items-start gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>Your account uses a temporary password. Please set a new one to continue.</span>
+        </div>
+      )}
 
       <div className="mx-auto max-w-md rounded-2xl border border-line bg-card p-6 shadow-card">
         <div className="mb-5 flex items-center gap-3">
