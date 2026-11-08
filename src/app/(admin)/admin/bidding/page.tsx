@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/feedback";
 import { Bike, Clock, Loader2, Users, XCircle } from "lucide-react";
 
 type Bid = { id: string; riderId: string; riderName: string | null; amount: number; status: string };
@@ -26,6 +27,7 @@ const STATUS_STYLE: Record<string, string> = {
 export default function AdminBiddingPage() {
   const [requests, setRequests] = useState<Req[] | null>(null);
   const [msg, setMsg] = useState("");
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/bidding", { cache: "no-store" });
@@ -40,7 +42,13 @@ export default function AdminBiddingPage() {
   }, [load]);
 
   async function cancel(id: string) {
-    if (!confirm("Cancel this delivery request? Its bids will be rejected.")) return;
+    const { confirmed } = await confirm({
+      title: "Cancel this delivery request?",
+      message: "Its bids will be rejected and the request removed from riders.",
+      confirmLabel: "Cancel request",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setMsg("");
     const res = await fetch("/api/admin/bidding", {
       method: "POST",

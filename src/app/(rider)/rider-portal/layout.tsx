@@ -21,7 +21,7 @@ const GROUPS: NavGroup[] = [
       { href: "/rider-portal", label: "Dashboard", short: "Home", icon: LayoutDashboard },
       { href: "/rider-portal/bids", label: "Delivery requests", short: "Requests", icon: Bike },
       { href: "/rider-portal/deliveries", label: "Deliveries", icon: Package },
-      { href: "/rider-portal/remittances", label: "Cash to Admin", short: "Cash", icon: Wallet },
+      { href: "/rider-portal/remittances", label: "Cash to MandiBazaar", short: "Cash", icon: Wallet },
       { href: "/rider-portal/earnings", label: "My earnings", short: "Earnings", icon: TrendingUp },
       { href: "/rider-portal/profile", label: "My profile", short: "Profile", icon: UserCircle },
       // F6: reopen the welcome tour any time

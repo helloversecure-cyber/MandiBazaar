@@ -253,9 +253,13 @@ async function reviewOrConfirm(
         data: { status: "REJECTED", reviewedById: adminId, reviewedAt: new Date(), rejectionReason: (opts.reason || "Not verified").slice(0, 300) },
       });
     } else {
-      // Supervisor may confirm a different (partial) cash amount than claimed; never
-      // more than what is still owed on the obligation.
-      if (opts.requireHandover && typeof opts.confirmedAmount === "number" && opts.confirmedAmount > 0) {
+      // Supervisor confirms the cash ACTUALLY received; never more than what is still
+      // owed. For a handover the amount is required — a blank/0 field must not silently
+      // fall back to the rider's claimed figure (that defeats the whole confirmation).
+      if (opts.requireHandover) {
+        if (typeof opts.confirmedAmount !== "number" || opts.confirmedAmount <= 0) {
+          throw new RemittanceError("BAD_AMOUNT", "Enter the actual cash amount received.");
+        }
         amount = r2(opts.confirmedAmount);
       }
       const left = outstanding(toNumber(sub.remittance.amountDue), toNumber(sub.remittance.amountRemitted));

@@ -140,6 +140,7 @@ export default function RiderBidsPage() {
                     <input
                       type="number"
                       min={1}
+                      max={10000}
                       inputMode="numeric"
                       placeholder="Your delivery fee"
                       value={amounts[r.id] ?? ""}

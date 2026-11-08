@@ -57,6 +57,21 @@ export async function PUT(req: NextRequest) {
       if (!s?.title?.trim()) {
         return apiError(`Slide ${i + 1}: title is required`, 400);
       }
+      // Length caps so an overlong field can't break the public homepage hero.
+      const limits: Array<[keyof SlideInput, number, string]> = [
+        ["title", 80, "Title"],
+        ["tag", 40, "Tag"],
+        ["sub", 160, "Subtitle"],
+        ["cta", 40, "Button text"],
+        ["stat", 40, "Stat"],
+        ["accent", 40, "Accent"],
+      ];
+      for (const [key, max, label] of limits) {
+        const v = s[key];
+        if (typeof v === "string" && v.trim().length > max) {
+          return apiError(`Slide ${i + 1}: ${label} must be ${max} characters or less`, 400);
+        }
+      }
       const img = s.imageUrl.trim();
       if (!img.startsWith("/") && !img.startsWith("https://")) {
         return apiError(`Slide ${i + 1}: image must be an uploaded image or https:// link`, 400);

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DownloadInvoiceButton } from "@/components/orders/DownloadInvoiceButton";
 import { OrderTimeline, type JourneyStep } from "@/components/orders/OrderTimeline";
+import { useConfirm } from "@/components/ui/feedback";
 import { Star } from "lucide-react";
 
 const CANCELABLE = new Set([
@@ -58,8 +59,15 @@ export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsgRaw] = useState("");
+  const [msgError, setMsgError] = useState(false);
+  // Track success vs error explicitly so errors never render in the green banner.
+  const setMsg = (text: string, error = false) => {
+    setMsgRaw(text);
+    setMsgError(error);
+  };
   const [busy, setBusy] = useState(false);
+  const confirmDialog = useConfirm();
   const [refundReason, setRefundReason] = useState("");
   const [showRefund, setShowRefund] = useState(false);
   const [reviews, setReviews] = useState<
@@ -115,14 +123,20 @@ export default function OrderDetailPage() {
     const data = await res.json();
     setBusy(false);
     if (!data.success) {
-      setMsg(data.error || "Action failed");
+      setMsg(data.error || "Action failed", true);
       return false;
     }
     return true;
   }
 
   async function cancelOrder() {
-    if (!confirm("Cancel this order?")) return;
+    const { confirmed } = await confirmDialog({
+      title: "Cancel this order?",
+      message: "If you paid online, a refund will be started automatically.",
+      confirmLabel: "Cancel order",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     const ok = await patchAction("CANCEL", { reason: "Cancelled by customer" });
     if (ok) {
       setMsg(
@@ -160,7 +174,7 @@ export default function OrderDetailPage() {
     const data = await res.json();
     if (!data.success) {
       setBusy(false);
-      setMsg(data.error || "Could not resume payment");
+      setMsg(data.error || "Could not resume payment", true);
       return;
     }
     if (data.data.stripeCheckout?.clientSecret) {
@@ -216,7 +230,7 @@ export default function OrderDetailPage() {
   async function submitReview(productId: string) {
     const draft = reviews[productId];
     if (!draft?.rating) {
-      setMsg("Please select a rating");
+      setMsg("Please select a rating", true);
       return;
     }
     setBusy(true);
@@ -234,7 +248,7 @@ export default function OrderDetailPage() {
     const data = await res.json();
     setBusy(false);
     if (!data.success) {
-      setMsg(data.error || "Could not submit review");
+      setMsg(data.error || "Could not submit review", true);
       return;
     }
     setReviews((prev) => ({
@@ -261,7 +275,7 @@ export default function OrderDetailPage() {
         <p
           className={cn(
             "mb-4 rounded-xl px-4 py-2.5 text-sm",
-            msg.toLowerCase().includes("fail") || msg.toLowerCase().includes("could")
+            msgError
               ? "bg-red-50 text-red-600"
               : "bg-emerald-50 text-emerald-700"
           )}

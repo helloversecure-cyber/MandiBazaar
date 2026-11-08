@@ -8,7 +8,7 @@ Every finding from "MandiBazaar QA-Report" (Hassan, 1–4 Nov 2026), with its st
 - **Data**: the code is ready; the owner must fix live data in the admin panel (see "Owner actions").
 - **Staging**: needs a staging copy with Stripe test mode to test end to end.
 
-**Checks run on the final code:** TypeScript clean, 378/378 unit tests, lint clean, production build OK. Browser checks done on desktop and 390px mobile.
+**Checks run on the final code:** TypeScript clean, 375/375 unit tests, lint clean, production build OK. Browser checks done on desktop and 390px mobile.
 
 ---
 
@@ -20,7 +20,7 @@ Every finding from "MandiBazaar QA-Report" (Hassan, 1–4 Nov 2026), with its st
 3. Review every commit by `hello.versecure@gmail.com`. Commit `b55ab76` added hidden malware to `postcss.config.mjs`; it has been removed.
 
 ### Deploy
-1. `npx prisma migrate deploy`. This applies 2 new migrations: `20261107120000_qa_report_fixes` and `20261108120000_otp_rider_pay_full_cod`.
+1. `npx prisma migrate deploy` (use the Neon **direct**, non-pooled URL). The repo's `prisma/migrations/` holds `0_init` (the full baseline schema) and `20261108172920_add_review_base_price`; `migrate deploy` applies whatever isn't yet on the target DB.
 2. Set these Vercel environment variables:
    - `CRON_SECRET` (any long random string). Without it, unpaid orders are never cancelled automatically.
    - `NEXTAUTH_SECRET`: at least 16 characters.

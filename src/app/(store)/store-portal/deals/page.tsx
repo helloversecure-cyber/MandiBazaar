@@ -95,7 +95,9 @@ export default function StoreDealsPage() {
       data.data?.pendingReview
         ? data.data.message ||
             "This deal changes the price by more than 20% — it was sent to MandiBazaar for review."
-        : "Deal live — customers will see this under Deals"
+        : selected && selected.status !== "ACTIVE"
+          ? "Deal saved. It will show under Deals once this product is approved and active."
+          : "Deal live — customers will see this under Deals."
     );
     setDealPrice("");
     load();

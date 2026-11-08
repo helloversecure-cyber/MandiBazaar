@@ -78,12 +78,16 @@ export default function AccountReviewsPage() {
                   "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase",
                   r.status === "APPROVED"
                     ? "bg-emerald-100 text-emerald-700"
-                    : r.status === "REJECTED"
-                      ? "bg-red-100 text-red-600"
-                      : "bg-amber-100 text-amber-700"
+                    : r.status === "PENDING"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-red-100 text-red-600"
                 )}
               >
-                {r.status}
+                {r.status === "APPROVED"
+                  ? "Published"
+                  : r.status === "PENDING"
+                    ? "Pending review"
+                    : "Not published"}
               </span>
             </div>
             {r.comment && (

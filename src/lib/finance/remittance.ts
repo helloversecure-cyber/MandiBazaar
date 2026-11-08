@@ -15,6 +15,7 @@
  */
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
+import { isUsableImageUrl } from "@/lib/orders/proof-review";
 import {
   notifyRemittanceSubmitted,
   notifyRemittanceOverdue,
@@ -218,6 +219,11 @@ export async function createRemittanceSubmission(opts: {
   const digital = opts.method === "BANK" || opts.method === "JAZZCASH";
   if (digital && !opts.proofUrl) {
     throw new RemittanceError("PROOF_REQUIRED", "Please attach a payment screenshot.");
+  }
+  // Validate the proof is a real uploaded image / https URL, not arbitrary text —
+  // matches the payment-proof path and blocks a junk "verified-pending" submission.
+  if (digital && !isUsableImageUrl(opts.proofUrl)) {
+    throw new RemittanceError("PROOF_REQUIRED", "Upload a valid payment screenshot.");
   }
 
   // One pending submission at a time (prevents duplicate / double-click submissions).

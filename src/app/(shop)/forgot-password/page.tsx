@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
           </div>
           <h1 className="mt-4 text-xl font-extrabold text-ink">Check your email</h1>
           <p className="mt-2 text-sm text-ink-muted">
-            If an account exists for <strong>{email.trim()}</strong>, we’ve sent a link to reset your password.
+            We’ve sent a link to reset your password to <strong>{email.trim()}</strong>. It may take a minute to arrive — remember to check spam.
           </p>
           {sent.devLink && (
             <p className="mt-3 break-all rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">

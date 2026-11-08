@@ -363,6 +363,7 @@ function SendPayment({
           <input
             type="number"
             min={1}
+            max={obligation.outstanding}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="w-28 bg-transparent px-2 py-2 text-sm outline-none"

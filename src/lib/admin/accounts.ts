@@ -81,11 +81,14 @@ export async function createRiderWithLogin(actor: { id: string }, raw: unknown) 
     riderRole = await prisma.role.create({ data: { name: "RIDER", description: "Delivery rider" } });
   }
 
-  // Firebase account (admin-vouched → email verified); the rider sets their own
-  // password via the reset link we email them.
+  // Firebase account (admin-vouched → email verified). Honour an admin-typed
+  // temporary password; otherwise generate one and email a reset link. Either way
+  // the rider must change it on first login.
+  const providedPw =
+    typeof d.password === "string" && d.password.trim() ? d.password.trim() : null;
   const fb = await createFirebaseUser({
     email: d.email,
-    password: generateTemporaryPassword(),
+    password: providedPw ?? generateTemporaryPassword(),
     emailVerified: true,
     displayName: d.name,
   });
@@ -102,6 +105,7 @@ export async function createRiderWithLogin(actor: { id: string }, raw: unknown) 
         roleId: riderRole!.id,
         onboardingCompleted: true,
         emailVerified: new Date(),
+        mustChangePassword: true,
       },
     });
     return tx.rider.create({
@@ -132,7 +136,9 @@ export async function createRiderWithLogin(actor: { id: string }, raw: unknown) 
     throw e;
   }
 
-  await sendPasswordResetEmail(d.email).catch(() => {});
+  // Only email a reset link when no password was set here (an admin who typed one
+  // will share it directly; a reset email would override that password).
+  if (!providedPw) await sendPasswordResetEmail(d.email).catch(() => {});
 
   await writeAuditLog({
     userId: actor.id,
@@ -334,9 +340,14 @@ export async function createStaff(actor: { id: string }, raw: unknown) {
   if (!d.email) return apiFieldErrors({ email: "Email is required (used to sign in)" });
   if (await getFirebaseUserByEmail(d.email)) return apiFieldErrors({ email: DUP_EMAIL_MSG }, 409);
 
+  // Honour an admin-typed temporary password; otherwise generate one and email a
+  // setup link. Either way the staff member must change it on first login.
+  const providedPw =
+    typeof d.password === "string" && d.password.trim() ? d.password.trim() : null;
+
   const fb = await createFirebaseUser({
     email: d.email,
-    password: generateTemporaryPassword(),
+    password: providedPw ?? generateTemporaryPassword(),
     emailVerified: true,
     displayName: d.fullName,
   });
@@ -353,6 +364,7 @@ export async function createStaff(actor: { id: string }, raw: unknown) {
         onboardingCompleted: true,
         isActive: true,
         emailVerified: new Date(),
+        mustChangePassword: true,
       },
       include: { role: { select: { name: true } } },
     });
@@ -361,7 +373,9 @@ export async function createStaff(actor: { id: string }, raw: unknown) {
     throw e;
   }
 
-  await sendPasswordResetEmail(d.email).catch(() => {});
+  // Only email a setup link when no password was set here (the admin who typed one
+  // will share it directly; a reset email would override that password).
+  if (!providedPw) await sendPasswordResetEmail(d.email).catch(() => {});
 
   await writeAuditLog({
     userId: actor.id,
@@ -381,7 +395,7 @@ export async function createStaff(actor: { id: string }, raw: unknown) {
       loginHint: {
         portal: "/login?portal=admin",
         identifier: user.email,
-        setupEmailSent: true,
+        setupEmailSent: !providedPw,
         message: "We emailed this staff member a link to set their password.",
       },
     },

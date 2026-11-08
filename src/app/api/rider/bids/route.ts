@@ -7,8 +7,12 @@ function handle(e: unknown) {
   if (e instanceof BiddingError) return apiError(e.message, 400, e.code);
   if (e instanceof Error) {
     if (e.message === "UNAUTHORIZED") return apiError("Please sign in to continue.", 401);
-    if (e.message === "FORBIDDEN" || e.message === "RIDER_NOT_APPROVED") {
-      return apiError("Your rider account isn't active yet.", 403);
+    if (
+      e.message === "FORBIDDEN" ||
+      e.message === "RIDER_NOT_APPROVED" ||
+      e.message === "RIDER_PENDING_APPROVAL"
+    ) {
+      return apiError("Your rider account is awaiting MandiBazaar approval.", 403);
     }
   }
   console.error("[rider-bids]", e);

@@ -687,6 +687,8 @@ export async function PATCH(req: Request) {
       if (!failureReason?.trim()) {
         return apiError("Please provide a failure reason", 400);
       }
+      // Bound the free text before it's persisted (matches safeNotes / other caps).
+      const reason = failureReason.trim().slice(0, 500);
       await prisma.$transaction(async (tx) => {
         // Lock + re-check inside the tx so two concurrent failures can't each
         // release the reserved stock (assertTransition allows FAILED→FAILED).
@@ -703,7 +705,7 @@ export async function PATCH(req: Request) {
           where: { id: orderId },
           data: {
             orderStatus: "FAILED",
-            cancelReason: failureReason.trim(),
+            cancelReason: reason,
           },
         });
         await tx.storeFulfillment.updateMany({
@@ -716,11 +718,11 @@ export async function PATCH(req: Request) {
             orderId,
             riderId: rider.id,
             failedAt: new Date(),
-            failureReason: failureReason.trim(),
+            failureReason: reason,
           },
           update: {
             failedAt: new Date(),
-            failureReason: failureReason.trim(),
+            failureReason: reason,
           },
         });
         for (const item of order.items) {

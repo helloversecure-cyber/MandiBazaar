@@ -268,9 +268,10 @@ export async function PATCH(req: Request) {
     if (typeof itemId !== "string" || !itemId) return apiError("Cart item not found", 404);
     if (
       quantity !== undefined &&
-      (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity > 1000)
+      (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity > 100)
     ) {
-      return apiError("Quantity must be a whole number");
+      // Same ceiling as cart-add (cartItemSchema caps at 100) — both re-cap to stock.
+      return apiError("Quantity must be a whole number (max 100)");
     }
 
     const item = await prisma.cartItem.findFirst({

@@ -19,16 +19,18 @@ export function StorePendingApproval({ reason }: { reason?: string | null }) {
   const [note, setNote] = useState("");
 
   const r = (reason || "").toLowerCase();
+  const suspended = r.includes("suspend");
   const rejected = r.includes("was not approved") || r.includes("rejected");
   const noStore = r.includes("no approved store");
-  const heading = r.includes("suspend")
+  const heading = suspended
     ? "Store suspended"
     : rejected
       ? "Application not approved"
       : "Account pending approval";
   // A rejected (or storeless) owner can submit a fresh application; a pending
-  // owner just waits, and a suspended owner should contact support.
-  const canReapply = rejected || noStore;
+  // owner just waits and can re-check; a suspended owner must contact support
+  // (re-checking never clears a suspension, so that button is hidden for them).
+  const canReapply = (rejected || noStore) && !suspended;
 
   async function checkStatus() {
     setChecking(true);
@@ -67,8 +69,18 @@ export function StorePendingApproval({ reason }: { reason?: string | null }) {
           {reason?.trim() || DEFAULT_MESSAGE}
         </p>
 
+        {suspended && (
+          <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            To appeal or resolve this, contact MandiBazaar support at{" "}
+            <a href="mailto:hello@mandibazaar.pk" className="font-semibold underline">
+              hello@mandibazaar.pk
+            </a>
+            .
+          </p>
+        )}
+
         <div className="mt-7 space-y-3">
-          {canReapply ? (
+          {suspended ? null : canReapply ? (
             <Button href="/store-portal/reapply" className="w-full gap-2">
               <Store className="h-4 w-4" />
               Submit a new application

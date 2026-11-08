@@ -49,7 +49,13 @@ type Order = {
 export default function RiderDeliveriesPage() {
   const [items, setItems] = useState<Order[]>([]);
   const [filter, setFilter] = useState("");
-  const [msg, setMsg] = useState("");
+  const [msg, setMsgRaw] = useState("");
+  const [msgError, setMsgError] = useState(false);
+  // Track success vs error so a blocking error never shows in the green banner.
+  const setMsg = (text: string, error = false) => {
+    setMsgRaw(text);
+    setMsgError(error);
+  };
   const [busyId, setBusyId] = useState("");
   const [failReason, setFailReason] = useState<Record<string, string>>({});
   const [proofUrl, setProofUrl] = useState<Record<string, string>>({});
@@ -101,7 +107,7 @@ export default function RiderDeliveriesPage() {
         }));
         return;
       }
-      setMsg(json.error || "Action failed");
+      setMsg(json.error || "Action failed", true);
       return;
     }
     if (action === "UPLOAD_PAYMENT_PROOF") setProofErr((prev) => ({ ...prev, [orderId]: "" }));
@@ -129,10 +135,13 @@ export default function RiderDeliveriesPage() {
   }
 
   function needsOnlineProof(o: Order) {
+    // Mirror the server (api/rider/route.ts): only the JazzCash at-door case needs a
+    // customer screenshot. STRIPE/card orders are captured by the gateway upfront
+    // (productPaymentStatus PAID) and must NOT be gated on a proof that doesn't exist.
     return (
       o.remainingAmount <= 0 &&
       !o.cashCollection &&
-      (o.productPaymentStatus === "PAID" || o.paymentMethod === "JAZZCASH")
+      o.paymentMethod === "JAZZCASH"
     );
   }
 
@@ -217,7 +226,13 @@ export default function RiderDeliveriesPage() {
       </div>
 
       {msg && (
-        <p className="mt-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+        <p
+          className={
+            msgError
+              ? "mt-3 rounded-lg bg-red-50 dark:bg-red-500/15 px-3 py-2 text-sm text-red-700 dark:text-red-300"
+              : "mt-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300"
+          }
+        >
           {msg}
         </p>
       )}
@@ -431,6 +446,7 @@ export default function RiderDeliveriesPage() {
                       <input
                         className="rounded-xl border border-line px-3 py-2 text-sm"
                         placeholder="Fail reason"
+                        maxLength={500}
                         value={failReason[o.id] || ""}
                         onChange={(e) =>
                           setFailReason({
@@ -441,7 +457,7 @@ export default function RiderDeliveriesPage() {
                       />
                       <Button
                         variant="outline"
-                        disabled={busyId === o.id}
+                        disabled={busyId === o.id || !failReason[o.id]?.trim()}
                         onClick={() =>
                           act(o.id, "MARK_FAILED", {
                             failureReason: failReason[o.id],

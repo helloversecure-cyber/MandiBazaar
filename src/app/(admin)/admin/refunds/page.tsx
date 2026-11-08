@@ -53,7 +53,13 @@ export default function AdminRefundsPage() {
   const [items, setItems] = useState<Refund[]>([]);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, totalPages: 1 });
-  const [msg, setMsg] = useState("");
+  const [msg, setMsgRaw] = useState("");
+  const [msgError, setMsgError] = useState(false);
+  // Explicit tone so errors never render in the success color.
+  const setMsg = (text: string, error = false) => {
+    setMsgRaw(text);
+    setMsgError(error);
+  };
   const [form, setForm] = useState({
     orderKey: "",
     reason: "",
@@ -186,7 +192,7 @@ export default function AdminRefundsPage() {
     const externalReference = extRef[id]?.trim();
     if (needsRef && !externalReference) {
       setBusy(false);
-      setMsg("Enter JazzCash/bank refund reference before COMPLETED");
+      setMsg("Enter JazzCash/bank refund reference before COMPLETED", true);
       return;
     }
     const res = await fetch("/api/refunds", {
@@ -201,7 +207,7 @@ export default function AdminRefundsPage() {
     const data = await res.json();
     setBusy(false);
     if (!data.success) {
-      setMsg(data.error || "Update failed");
+      setMsg(data.error || "Update failed", true);
       return;
     }
     setMsg(`Refund marked ${status}`);
@@ -218,13 +224,7 @@ export default function AdminRefundsPage() {
       </p>
       {msg && (
         <p
-          className={`mt-3 text-sm ${
-            msg.toLowerCase().includes("fail") ||
-            msg.toLowerCase().includes("enter") ||
-            msg.toLowerCase().includes("not found")
-              ? "text-red-600"
-              : "text-leaf-600"
-          }`}
+          className={`mt-3 text-sm ${msgError ? "text-red-600" : "text-leaf-600"}`}
         >
           {msg}
         </p>
