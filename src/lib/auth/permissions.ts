@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   REVIEWS_WRITE: "reviews:write",
   RIDERS_WRITE: "riders:write",
   AUDIT_READ: "audit:read",
+  REFUNDS_READ: "refunds:read",
   REFUNDS_WRITE: "refunds:write",
   STORES_READ: "stores:read",
   STORES_WRITE: "stores:write",

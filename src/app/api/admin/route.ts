@@ -4,7 +4,8 @@ import { productSchema } from "@/lib/validators/schemas";
 import { writeAuditLog } from "@/lib/audit";
 import { adjustStock } from "@/lib/inventory/stock";
 import { slugify, apiError, apiSuccess, apiZodError, apiFieldErrors, toNumber, toUserMessage } from "@/lib/utils";
-import { PERMISSIONS } from "@/lib/auth/permissions";
+import { PERMISSIONS, hasPermission } from "@/lib/auth/permissions";
+import { RoleName } from "@prisma/client";
 import { NextRequest } from "next/server";
 // D2 (admin catalog, stores, settings & lists) handlers
 import {
@@ -41,14 +42,13 @@ export async function GET(req: NextRequest) {
       settings: PERMISSIONS.SETTINGS_WRITE,
       audit: PERMISSIONS.AUDIT_READ,
     };
-    if (resource === "staff") {
-      await requireSuperAdmin();
-    } else if (READ_PERMISSION[resource]) {
-      await requireAdmin(READ_PERMISSION[resource]);
-    } else {
-      // Unknown resource: still require an admin session before replying.
-      await requireAdmin();
-    }
+    const session =
+      resource === "staff"
+        ? await requireSuperAdmin()
+        : READ_PERMISSION[resource]
+          ? await requireAdmin(READ_PERMISSION[resource])
+          : // Unknown resource: still require an admin session before replying.
+            await requireAdmin();
 
     if (resource === "products") {
       return listAdminProducts(req.nextUrl.searchParams);
@@ -76,7 +76,11 @@ export async function GET(req: NextRequest) {
         });
         return apiSuccess({ items });
       }
-      return listRiders(req.nextUrl.searchParams);
+      // Full payout account numbers only for roles that pay riders; others see masked.
+      const canSeePayout =
+        session.user.role === "SUPER_ADMIN" ||
+        hasPermission(session.user.role as RoleName, PERMISSIONS.PAYOUTS_WRITE);
+      return listRiders(req.nextUrl.searchParams, { maskPayout: !canSeePayout });
     }
 
     if (resource === "customers") {

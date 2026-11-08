@@ -10,8 +10,8 @@ import {
   toNumber,
 } from "@/lib/utils";
 import { zOrderNumber } from "@/lib/validators/pk";
-import { PERMISSIONS } from "@/lib/auth/permissions";
-import { RefundStatus } from "@prisma/client";
+import { PERMISSIONS, hasPermission } from "@/lib/auth/permissions";
+import { RefundStatus, RoleName } from "@prisma/client";
 import {
   advanceRefundStatus,
   createRefundRecord,
@@ -26,11 +26,10 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const mine = sp.get("mine") === "true";
     const orderKey = sp.get("order")?.trim();
-    const isAdmin = [
-      "SUPER_ADMIN",
-      "ADMIN",
-      "ORDER_MANAGER",
-    ].includes(session.user.role);
+    // Reading refund financial records requires the refunds:read permission
+    // (Super Admin + Admin), not just any admin role — an order manager reads
+    // refund status via the order itself, not this global financial list.
+    const isAdmin = hasPermission(session.user.role as RoleName, PERMISSIONS.REFUNDS_READ);
 
     if (orderKey) {
       if (!isAdmin && !mine) {

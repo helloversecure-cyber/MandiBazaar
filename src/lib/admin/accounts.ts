@@ -234,7 +234,18 @@ export async function updateRiderDocuments(actor: { id: string }, id: string, da
   return apiSuccess({ ...rider, approvalProblems: riderApprovalProblems(rider) });
 }
 
-export async function listRiders(sp: URLSearchParams) {
+/** Mask all but the last 4 chars of a payout account/number for list views. */
+function maskTail(v: string | null): string | null {
+  if (!v) return v;
+  const t = v.trim();
+  if (t.length <= 4) return "••••";
+  return "••••" + t.slice(-4);
+}
+
+export async function listRiders(
+  sp: URLSearchParams,
+  opts: { maskPayout?: boolean } = {}
+) {
   const { page, limit, skip, take } = parsePagination(sp, { defaultLimit: 25, maxLimit: 50 });
   const q = sp.get("q")?.trim();
   const status = sp.get("status"); // PENDING | APPROVED | REJECTED | INACTIVE
@@ -282,6 +293,15 @@ export async function listRiders(sp: URLSearchParams) {
       ...r,
       approvalProblems: riderApprovalProblems(r),
       unpaid: unpaid[r.id] || { count: 0, amount: 0 },
+      // Payout account numbers are only needed by roles that actually pay riders.
+      // For everyone else (e.g. order/delivery managers) mask them — approval still
+      // works since riderApprovalProblems is computed from the full row above.
+      ...(opts.maskPayout
+        ? {
+            accountNumber: maskTail(r.accountNumber),
+            jazzCashNumber: maskTail(r.jazzCashNumber),
+          }
+        : {}),
     })),
     pagination: paginationMeta(page, limit, total),
     pendingCount,
