@@ -134,8 +134,14 @@ function JazzCashQrPay() {
           Pay for order {orderNumber}
         </h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Pay <strong>{formatCurrency(amountPkr || 0)}</strong> to{" "}
+          Pay{" "}
+          <strong>{amountPkr > 0 ? formatCurrency(amountPkr) : "—"}</strong> to{" "}
           <strong>{merchantName}</strong>, then upload your receipt below.
+          {amountPkr > 0 ? null : (
+            <span className="block text-xs text-ink-subtle">
+              Loading the exact amount from your order…
+            </span>
+          )}
         </p>
 
         <div className="mx-auto mt-6 max-w-xs overflow-hidden rounded-2xl border border-line bg-amber-300">
@@ -175,7 +181,8 @@ function JazzCashQrPay() {
           </h2>
           <p className="text-sm text-ink-muted">
             After paying, upload the JazzCash success screenshot / receipt.
-            MandiBazaar will verify and confirm your order.
+            MandiBazaar will verify it (usually within a few hours) and confirm
+            your order. You don’t need to pay again — just wait for confirmation.
           </p>
           <ImageUploadField
             label="Payment receipt"

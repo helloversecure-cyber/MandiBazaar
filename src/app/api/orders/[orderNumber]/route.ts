@@ -118,7 +118,18 @@ export async function GET(
         : null,
     };
 
-    if (!isAdmin) return apiSuccess(base);
+    if (!isAdmin) {
+      // Expose the customer's OWN receipt status (safe fields only — no uploader/
+      // reviewer identity) so the confirmation/order pages can show "receipt
+      // received — verifying" instead of telling a customer who already paid via
+      // JazzCash QR that they're unpaid and nudging a second payment.
+      const myProofs = await prisma.paymentProof.findMany({
+        where: { orderId: order.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true, reviewNotes: true, createdAt: true, reviewedAt: true },
+      });
+      return apiSuccess({ ...base, paymentProofs: myProofs });
+    }
 
     // ---- Admin-only detail (QA P2: full order page) ----
     const [fulfillments, proofs, remittance, history] = await Promise.all([

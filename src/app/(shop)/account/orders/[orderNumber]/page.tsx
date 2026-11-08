@@ -53,6 +53,7 @@ type Order = {
   rider?: Rider;
   refunds?: { id: string; amount: number; status: string; reason: string }[];
   statusTimeline?: JourneyStep[];
+  paymentProofs?: { id: string; status: string; reviewNotes?: string | null }[];
 };
 
 export default function OrderDetailPage() {
@@ -137,6 +138,13 @@ export default function OrderDetailPage() {
   const refundable = order.refundableAmount ?? 0;
   const isCancelled = order.orderStatus === "CANCELLED";
   const isDelivered = order.orderStatus === "DELIVERED";
+  // JazzCash-QR receipt state: a submitted receipt keeps the order PENDING_PAYMENT
+  // until an admin verifies, so surface it instead of a generic "pay again" prompt.
+  const awaitingPayment = order.orderStatus === "PENDING_PAYMENT";
+  const proofList = order.paymentProofs || [];
+  const proofPending = awaitingPayment && proofList.some((p) => p.status === "PENDING_REVIEW");
+  const proofRejected =
+    awaitingPayment && !proofPending && proofList[0]?.status === "REJECTED" ? proofList[0] : null;
   const canRequestRefund =
     refundable > 0 &&
     order.orderStatus !== "PENDING_PAYMENT" &&
@@ -322,11 +330,22 @@ export default function OrderDetailPage() {
         <div className="mb-6 rounded-2xl border border-line bg-card p-5 shadow-card">
           <h2 className="mb-4 text-sm font-bold text-ink">Order progress</h2>
           <OrderTimeline steps={order.statusTimeline} />
-          {order.orderStatus === "PENDING_PAYMENT" && (
+          {proofPending ? (
+            <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+              Receipt received — MandiBazaar is verifying your payment. Your order
+              is confirmed once it’s checked. No need to pay again.
+            </p>
+          ) : proofRejected ? (
+            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-300">
+              Your receipt was declined
+              {proofRejected.reviewNotes ? ` — ${proofRejected.reviewNotes}` : ""}.
+              Please upload a new JazzCash receipt using “Complete payment”.
+            </p>
+          ) : order.orderStatus === "PENDING_PAYMENT" ? (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
               Waiting for payment confirmation before the order is confirmed.
             </p>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -357,9 +376,9 @@ export default function OrderDetailPage() {
           variant="outline"
           size="sm"
         />
-        {order.orderStatus === "PENDING_PAYMENT" && (
+        {awaitingPayment && !proofPending && (
           <Button type="button" size="sm" disabled={busy} onClick={resumePayment}>
-            Complete payment
+            {proofRejected ? "Upload a new receipt" : "Complete payment"}
           </Button>
         )}
         {CANCELABLE.has(order.orderStatus) && (

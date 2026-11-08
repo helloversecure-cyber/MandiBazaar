@@ -55,6 +55,15 @@ function ConfirmationContent() {
     deliveryFeePaymentStatus: String(order.deliveryFeePaymentStatus || ""),
   });
   const awaitingPayment = status === "PENDING_PAYMENT";
+  // A JazzCash-QR customer uploads a receipt and the order stays PENDING_PAYMENT
+  // until an admin verifies. Expose that state so we don't tell a customer who
+  // already paid that they're unpaid and nudge a second payment.
+  const proofs =
+    (order.paymentProofs as { status: string; reviewNotes?: string | null }[] | undefined) || [];
+  const pendingReview = awaitingPayment && proofs.some((p) => p.status === "PENDING_REVIEW");
+  const latestProof = proofs[0];
+  const rejectedProof =
+    awaitingPayment && !pendingReview && latestProof?.status === "REJECTED" ? latestProof : null;
   const failed =
     status === "CANCELLED" || status === "FAILED" || status === "RETURNED";
   const confirmed =
@@ -73,7 +82,35 @@ function ConfirmationContent() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
       <div className="rounded-3xl bg-card p-8 shadow-soft text-center">
-        {awaitingPayment ? (
+        {awaitingPayment && pendingReview ? (
+          <>
+            <p className="text-sm font-medium uppercase tracking-widest text-emerald-700">
+              Receipt received
+            </p>
+            <h1 className="mt-2 font-display text-4xl text-ink">
+              We’re verifying your payment
+            </h1>
+            <p className="mt-2 text-ink-subtle">
+              Thanks — we’ve received your receipt for order{" "}
+              {order.orderNumber as string}. MandiBazaar will confirm it shortly,
+              usually within a few hours. No need to pay again.
+            </p>
+          </>
+        ) : awaitingPayment && rejectedProof ? (
+          <>
+            <p className="text-sm font-medium uppercase tracking-widest text-red-600">
+              Receipt needs attention
+            </p>
+            <h1 className="mt-2 font-display text-4xl text-ink">
+              We couldn’t verify your payment
+            </h1>
+            <p className="mt-2 text-ink-subtle">
+              {rejectedProof.reviewNotes
+                ? `Your receipt for order ${order.orderNumber as string} was declined: ${rejectedProof.reviewNotes}. Please upload a clear JazzCash receipt again.`
+                : `Your receipt for order ${order.orderNumber as string} couldn’t be verified. Please upload a clear JazzCash receipt again.`}
+            </p>
+          </>
+        ) : awaitingPayment ? (
           <>
             <p className="text-sm font-medium uppercase tracking-widest text-amber-700">
               Awaiting payment
@@ -176,7 +213,15 @@ function ConfirmationContent() {
           ))}
         </ul>
 
-        {awaitingPayment && (
+        {pendingReview && (
+          <p className="mt-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            Your payment receipt is with MandiBazaar for verification. We’ll confirm
+            your order as soon as it’s checked — no need to pay again. You can track
+            the status on your order page.
+          </p>
+        )}
+
+        {awaitingPayment && !pendingReview && (
           <p className="mt-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
             Unpaid orders expire automatically after a while and release reserved
             stock. Finish payment from your order page.
@@ -191,11 +236,15 @@ function ConfirmationContent() {
         )}
 
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          {awaitingPayment ? (
+          {awaitingPayment && pendingReview ? (
+            // Receipt is under review — no payment action, avoid a double-pay nudge.
+            // The "View order" / "Continue shopping" buttons below remain.
+            null
+          ) : awaitingPayment ? (
             <Button
               href={`/checkout/payment?order=${encodeURIComponent(String(order.orderNumber))}&orderId=${encodeURIComponent(String(order.id))}`}
             >
-              Complete payment
+              {rejectedProof ? "Upload a new receipt" : "Complete payment"}
             </Button>
           ) : (
             <DownloadInvoiceButton

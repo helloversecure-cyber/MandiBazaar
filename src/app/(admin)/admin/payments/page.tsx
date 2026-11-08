@@ -141,12 +141,33 @@ function PaymentsInner() {
       message: (
         <span>
           Only approve if <strong>{formatCurrency(p.amountDue)}</strong> has really arrived in the
-          JazzCash Till. The order is then confirmed and sent to the store.
+          JazzCash Till. Type the amount shown on the receipt to double-check it matches — the
+          order is then confirmed and sent to the store.
         </span>
       ),
       confirmLabel: "Payment received — approve",
+      reason: {
+        label: "Amount on the receipt (Rs.) — optional, to cross-check",
+        required: false,
+        maxLength: 12,
+        placeholder: String(p.amountDue ?? ""),
+      },
     });
-    if (r.confirmed) await send(p, { decision: "APPROVED" }, "Payment received — order confirmed.");
+    if (!r.confirmed) return;
+    const typed = (r.reason || "").replace(/[,\s]/g, "");
+    let receiptAmount: number | undefined;
+    if (typed) {
+      receiptAmount = Number(typed);
+      if (!Number.isFinite(receiptAmount) || receiptAmount < 0) {
+        toast.error("Enter a valid receipt amount, or leave it blank");
+        return;
+      }
+    }
+    await send(
+      p,
+      receiptAmount !== undefined ? { decision: "APPROVED", receiptAmount } : { decision: "APPROVED" },
+      "Payment received — order confirmed."
+    );
   }
 
   async function decline(p: Proof) {

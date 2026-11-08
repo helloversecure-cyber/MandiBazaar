@@ -484,6 +484,26 @@ export async function POST(req: Request) {
       if (decision === "APPROVED" && !rules.canApprove) {
         return apiError(rules.blockedReason || "This receipt cannot be approved", 400);
       }
+      // Optional amount-match safeguard: if the reviewer types the amount they see
+      // on the receipt, block approval when it is materially below what is due, so
+      // an underpaid order isn't marked fully paid. Absent → behaviour unchanged.
+      if (decision === "APPROVED" && !proof.riderId) {
+        const raw = body.receiptAmount;
+        if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+          const receiptAmount = Number(raw);
+          if (!Number.isFinite(receiptAmount) || receiptAmount < 0) {
+            return apiFieldErrors({ receiptAmount: "Enter the amount shown on the receipt" });
+          }
+          const { manualPaymentDue } = await import("@/lib/orders/apply-manual-online-payment");
+          const due = manualPaymentDue(order);
+          const dueAmount = due?.amount ?? 0;
+          if (dueAmount > 0 && receiptAmount + 0.5 < dueAmount) {
+            return apiFieldErrors({
+              receiptAmount: `Receipt shows Rs. ${receiptAmount.toLocaleString("en-PK")} but Rs. ${dueAmount.toLocaleString("en-PK")} is due. Decline it and ask the customer to pay the full amount, or collect the difference before approving.`,
+            });
+          }
+        }
+      }
       let refundAmount = 0;
       if (decision === "REFUND") {
         if (!rules.canRefund) {
