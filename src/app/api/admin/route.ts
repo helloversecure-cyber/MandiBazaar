@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/auth";
+import { requireAdmin, requireSuperAdmin } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db";
 import { productSchema } from "@/lib/validators/schemas";
 import { writeAuditLog } from "@/lib/audit";
@@ -28,8 +28,27 @@ import { stockAdjustLimitError, stockAdjustSchema } from "@/lib/admin/form-rules
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin();
     const resource = req.nextUrl.searchParams.get("resource") || "products";
+
+    // Least-privilege: each resource requires its own read permission, not just
+    // "is an admin". Staff listing is Super-Admin-only (it exposes other admins).
+    const READ_PERMISSION: Record<string, string> = {
+      products: PERMISSIONS.PRODUCTS_READ,
+      "review-counts": PERMISSIONS.PRODUCTS_READ,
+      categories: PERMISSIONS.PRODUCTS_READ,
+      riders: PERMISSIONS.RIDERS_WRITE,
+      customers: PERMISSIONS.CUSTOMERS_READ,
+      settings: PERMISSIONS.SETTINGS_WRITE,
+      audit: PERMISSIONS.AUDIT_READ,
+    };
+    if (resource === "staff") {
+      await requireSuperAdmin();
+    } else if (READ_PERMISSION[resource]) {
+      await requireAdmin(READ_PERMISSION[resource]);
+    } else {
+      // Unknown resource: still require an admin session before replying.
+      await requireAdmin();
+    }
 
     if (resource === "products") {
       return listAdminProducts(req.nextUrl.searchParams);

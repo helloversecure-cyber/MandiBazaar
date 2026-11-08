@@ -88,7 +88,9 @@ function dataFor(d: ReturnType<typeof couponDefinitionSchema.parse>) {
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin();
+    // Least-privilege: reading coupons requires the coupons permission, not just
+    // any admin session (COUPONS_WRITE is the only coupon permission in the model).
+    await requireAdmin(PERMISSIONS.COUPONS_WRITE);
     const sp = req.nextUrl.searchParams;
     const { page, limit, skip, take } = parsePagination(sp, { defaultLimit: 25, maxLimit: 100 });
     const q = (sp.get("q") || "").trim();

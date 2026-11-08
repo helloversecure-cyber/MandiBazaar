@@ -426,12 +426,25 @@ export async function PATCH(req: Request) {
       });
 
       let added = 0;
+      let capped = false;
       for (const item of order.items) {
         if (!item.productId) continue;
         const product = await prisma.product.findUnique({
           where: { id: item.productId },
+          include: { variants: true },
         });
         if (!product || product.status !== "ACTIVE") continue;
+
+        // Cap at what's actually available now (variant-aware), mirroring cart add —
+        // a reorder must never push the cart past current stock.
+        let available = product.stockQuantity - product.reservedStock;
+        if (item.variantId) {
+          const variant = product.variants.find((v) => v.id === item.variantId);
+          if (!variant || !variant.isActive) continue;
+          available = variant.stockQuantity - variant.reservedStock;
+        }
+        available = Math.max(0, available);
+        if (available <= 0) continue;
 
         const existing = await prisma.cartItem.findFirst({
           where: {
@@ -440,10 +453,18 @@ export async function PATCH(req: Request) {
             variantId: item.variantId || null,
           },
         });
+        const current = existing?.quantity ?? 0;
+        let nextQty = current + item.quantity;
+        if (nextQty > available) {
+          nextQty = available;
+          capped = true;
+        }
+        if (nextQty <= current) continue; // already at/over stock — nothing to add
+
         if (existing) {
           await prisma.cartItem.update({
             where: { id: existing.id },
-            data: { quantity: existing.quantity + item.quantity },
+            data: { quantity: nextQty },
           });
         } else {
           await prisma.cartItem.create({
@@ -451,7 +472,7 @@ export async function PATCH(req: Request) {
               cartId: cart.id,
               productId: item.productId,
               variantId: item.variantId || null,
-              quantity: item.quantity,
+              quantity: nextQty,
             },
           });
         }
@@ -461,7 +482,13 @@ export async function PATCH(req: Request) {
       if (!added) {
         return apiError("No available products from this order to reorder", 400);
       }
-      return apiSuccess({ message: `${added} item(s) added to cart`, added });
+      return apiSuccess({
+        message: capped
+          ? `${added} item(s) added to cart — some quantities were reduced to match current stock.`
+          : `${added} item(s) added to cart`,
+        added,
+        capped,
+      });
     }
 
     if (body.action === "REQUEST_REFUND") {

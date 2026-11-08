@@ -22,7 +22,12 @@ import { riderProfileUpdateSchema } from "@/lib/portal/rider-profile";
 import { zodFieldErrors } from "@/lib/validators/pk";
 import { lockAndAddPayment } from "@/lib/orders/payment-ledger";
 import { cashDueBreakdown, collectCashLabel } from "@/lib/orders/full-cod";
-import { riderCashSummary } from "@/lib/finance/remittance";
+import {
+  riderCashSummary,
+  remittanceDue,
+  deadlineFrom,
+  remittanceDeadlineHours,
+} from "@/lib/finance/remittance";
 import { isUsableImageUrl } from "@/lib/orders/proof-review";
 import { recordRiderFeeForOrder } from "@/lib/riders/pay";
 
@@ -314,6 +319,9 @@ export async function PATCH(req: Request) {
       amountCollected?: number;
       failureReason?: string;
     };
+    // Bound rider-supplied free text before it reaches any write (matches the
+    // 500-char cap used elsewhere for notes).
+    const safeNotes = typeof notes === "string" ? notes.trim().slice(0, 500) : "";
 
     if (action === "SET_STATUS") {
       const status = String(body.status || "").toUpperCase();
@@ -558,7 +566,7 @@ export async function PATCH(req: Request) {
             riderId: rider.id,
             userId: session.user.id,
             requested: typeof amountCollected === "number" ? amountCollected : undefined,
-            notes: notes || "Collected by rider on delivery",
+            notes: safeNotes || "Collected by rider on delivery",
             requireFull: true,
           });
         }
@@ -635,7 +643,7 @@ export async function PATCH(req: Request) {
           riderId: rider.id,
           userId: session.user.id,
           requested: amount,
-          notes: notes || "Collected by rider",
+          notes: safeNotes || "Collected by rider",
           requireFull: false,
         })
       );
@@ -652,49 +660,8 @@ export async function PATCH(req: Request) {
       });
     }
 
-    // --- Rider submits cash to MandiBazaar ---
-    if (action === "SUBMIT_REMITTANCE") {
-      if (!order.cashRemittance) {
-        return apiError("No remittance record — collect COD first", 400);
-      }
-      if (order.cashRemittance.riderId !== rider.id) {
-        return apiError("Remittance does not belong to you", 403);
-      }
-      if (order.cashRemittance.status === "RECEIVED") {
-        return apiError("MandiBazaar already received this remittance", 400);
-      }
-      if (order.cashRemittance.status === "SUBMITTED") {
-        return apiError("Already submitted — waiting for MandiBazaar confirmation", 400);
-      }
-      if (order.cashRemittance.status === "DISPUTED") {
-        return apiError("Remittance is disputed — contact MandiBazaar", 400);
-      }
-
-      const updated = await prisma.cashRemittance.update({
-        where: { orderId },
-        data: {
-          status: "SUBMITTED",
-          submittedAt: new Date(),
-          notes:
-            notes ||
-            order.cashRemittance.notes ||
-            "Rider submitted cash to MandiBazaar",
-        },
-      });
-
-      await writeAuditLog({
-        userId: session.user.id,
-        action: "RIDER_REMITTANCE_SUBMITTED",
-        entity: "CashRemittance",
-        entityId: updated.id,
-        newValue: { amount: toNumber(updated.amount) },
-      });
-
-      return apiSuccess({
-        message: "Cash marked as submitted to MandiBazaar — awaiting confirmation",
-        remittance: { ...updated, amount: toNumber(updated.amount) },
-      });
-    }
+    // Rider cash submission moved to POST /api/rider/remittances
+    // (createRemittanceSubmission) — method, proof and reference live there.
 
     // --- Delivery failed ---
     if (action === "MARK_FAILED") {
@@ -896,19 +863,30 @@ async function recordCodCash(
     }
     throw e;
   }
+  // The rider RETAINS the delivery fee collected in cash (ledger.feeApplied) and
+  // remits only the product money. Set the obligation (amountDue), collection time
+  // and 48h deadline so the remittance + overdue-restriction flow works on the
+  // rider-collected path (mirrors the admin-recorded path in /api/orders).
+  const deadlineHours = await remittanceDeadlineHours(tx);
+  const collectedAt = new Date();
+  const dueAt = deadlineFrom(collectedAt, deadlineHours);
+  const amountDue = remittanceDue(amount, ledger.feeApplied);
   await tx.cashRemittance.upsert({
     where: { orderId: p.orderId },
     create: {
       orderId: p.orderId,
       riderId: p.riderId,
       amount,
+      amountDue,
+      collectedAt,
+      dueAt,
       status: "PENDING",
       notes:
         ledger.feeApplied > 0
           ? `COD collected (products + delivery fee Rs ${ledger.feeApplied}) — remit to MandiBazaar`
           : "COD collected — remit to MandiBazaar",
     },
-    update: { amount, riderId: p.riderId, status: "PENDING" },
+    update: { amount, amountDue, collectedAt, dueAt, riderId: p.riderId, status: "PENDING" },
   });
   await tx.order.update({
     where: { id: p.orderId },

@@ -318,6 +318,10 @@ export async function markRemittanceReceived(
   opts: { method?: "CASH_HANDOVER" | "BANK" | "JAZZCASH"; notes?: string } = {}
 ) {
   const res = await prisma.$transaction(async (tx) => {
+    // Row lock: two admins confirming the same remittance at once would otherwise
+    // both pass the status check and double-record the settlement. The second txn
+    // blocks here, then sees status = RECEIVED below and is rejected.
+    await tx.$queryRaw`SELECT id FROM "CashRemittance" WHERE id = ${remittanceId} FOR UPDATE`;
     const remit = await tx.cashRemittance.findUnique({
       where: { id: remittanceId },
       select: { id: true, riderId: true, amountDue: true, amountRemitted: true, status: true },
