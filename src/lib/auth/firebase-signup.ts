@@ -88,31 +88,44 @@ export async function sendSignupVerificationEmail(
   email: string,
   password?: string
 ): Promise<{ sent: boolean; devLink?: string }> {
-  const fbLink = await emailVerificationLink(email, `${appUrl()}/login`);
-  const link = toAppActionUrl(fbLink);
-  // 1) Preferred: our branded HTML email (with a button) via Resend.
-  if (emailConfigured()) {
-    const { html, text } = renderActionEmail({
-      heading: "Verify your email",
-      intro: "Welcome to MandiBazaar! Tap the button below to confirm your email and activate your account.",
-      buttonLabel: "Verify my email",
-      buttonUrl: link,
-      footnote: "If you didn't create a MandiBazaar account, you can safely ignore this email.",
-    });
-    const sent = await sendEmail({ to: email, subject: "Verify your MandiBazaar email", text, html });
-    if (sent) return { sent: true };
+  // The verification email is a secondary step — the account + any store/rider
+  // application are already created by the time we get here. It must NEVER throw
+  // the whole signup (e.g. Firebase auth/unauthorized-continue-uri when the app
+  // domain isn't in Authorized domains, or an email-provider outage). On failure
+  // we log and return {sent:false}; the user can resend / reset-password later.
+  try {
+    const fbLink = await emailVerificationLink(email, `${appUrl()}/login`);
+    const link = toAppActionUrl(fbLink);
+    // 1) Preferred: our branded HTML email (with a button) via Resend.
+    if (emailConfigured()) {
+      const { html, text } = renderActionEmail({
+        heading: "Verify your email",
+        intro: "Welcome to MandiBazaar! Tap the button below to confirm your email and activate your account.",
+        buttonLabel: "Verify my email",
+        buttonUrl: link,
+        footnote: "If you didn't create a MandiBazaar account, you can safely ignore this email.",
+      });
+      const sent = await sendEmail({ to: email, subject: "Verify your MandiBazaar email", text, html });
+      if (sent) return { sent: true };
+    }
+    // 2) Let Firebase deliver its own email (works to any address, no domain setup).
+    if (password) {
+      const sent = await firebaseSendVerificationEmail(email, password, `${appUrl()}/login`);
+      if (sent) return { sent: true };
+    }
+    // 3) Development: surface the link on screen.
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[verify-email] link for ${email}: ${link}`);
+      return { sent: false, devLink: link };
+    }
+    return { sent: false };
+  } catch (e) {
+    console.error(
+      "[verify-email] could not send verification email (account still created)",
+      e instanceof Error ? e.message : e
+    );
+    return { sent: false };
   }
-  // 2) Let Firebase deliver its own email (works to any address, no domain setup).
-  if (password) {
-    const sent = await firebaseSendVerificationEmail(email, password, `${appUrl()}/login`);
-    if (sent) return { sent: true };
-  }
-  // 3) Development: surface the link on screen.
-  if (process.env.NODE_ENV !== "production") {
-    console.info(`[verify-email] link for ${email}: ${link}`);
-    return { sent: false, devLink: link };
-  }
-  return { sent: false };
 }
 
 /**
