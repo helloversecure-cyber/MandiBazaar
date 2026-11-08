@@ -24,7 +24,7 @@ export async function Footer() {
       sub: `${rupees(site.ratePerKm)}/km go + return · free on ${rupees(site.freeDeliveryThreshold)}+`,
       href: "/faq",
     },
-    { icon: CreditCard, title: "JazzCash & card payments", sub: "Delivery fee paid online", href: "/faq" },
+    { icon: CreditCard, title: "JazzCash & Cash on Delivery", sub: "Pay online or at your door", href: "/faq" },
     {
       icon: Banknote,
       title: "Pay for products in cash on delivery",

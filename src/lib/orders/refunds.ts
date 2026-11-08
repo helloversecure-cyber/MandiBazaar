@@ -525,8 +525,11 @@ export async function advanceRefundStatus(opts: {
       : "",
   ].filter(Boolean);
 
-  await prisma.refund.update({
-    where: { id: refund.id },
+  // Atomic claim: only advance if the refund is still in the status we validated.
+  // This serialises two concurrent completions (double-click / two admins) so the
+  // non-idempotent ledger/remittance steps below run exactly once.
+  const claimed = await prisma.refund.updateMany({
+    where: { id: refund.id, status: refund.status },
     data: {
       status: opts.status,
       notes: noteParts.join(" | ") || null,
@@ -536,6 +539,9 @@ export async function advanceRefundStatus(opts: {
       ...(opts.status === "COMPLETED" ? { processedAt: new Date() } : {}),
     },
   });
+  if (claimed.count !== 1) {
+    return { ok: false, error: "This refund was just updated — reload and try again" };
+  }
 
   if (opts.status === "COMPLETED") {
     await applyOrderLedgerOnComplete(refund.orderId, amount, refund.id);

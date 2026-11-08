@@ -110,10 +110,12 @@ export async function GET(req: NextRequest) {
     }
 
     const and: Prisma.OrderWhereInput[] = [];
+    const isStoreOwner = !isAdmin && session.user.role === "STORE_OWNER";
+    let ownerStoreIds: string[] = [];
     if (!isAdmin) {
       if (session.user.role === "STORE_OWNER") {
-        const storeIds = await getUserStoreIds(session.user.id);
-        and.push({ items: { some: { storeId: { in: storeIds } } } });
+        ownerStoreIds = await getUserStoreIds(session.user.id);
+        and.push({ items: { some: { storeId: { in: ownerStoreIds } } } });
       } else if (session.user.role === "RIDER") {
         const rider = await prisma.rider.findUnique({
           where: { userId: session.user.id },
@@ -219,6 +221,21 @@ export async function GET(req: NextRequest) {
           deliveryFeePaymentLabel: deliveryFeePaymentLabel(base),
           cashDue: cashDueBreakdown({ ...base, deliveryFeePaymentStatus: o.deliveryFeePaymentStatus }),
         };
+        if (isStoreOwner) {
+          // A store owner only sees their OWN store's line items, and never the
+          // customer's email or the rider's cash-remittance details (cross-tenant).
+          const { customer, cashRemittance: _cr, cashCollection: _cc, ...rest } = base;
+          void _cr;
+          void _cc;
+          return {
+            ...rest,
+            ...money,
+            items: o.items.filter((i) => ownerStoreIds.includes(i.storeId)),
+            customer: customer
+              ? { id: customer.id, fullName: customer.fullName, phone: customer.phone }
+              : null,
+          };
+        }
         if (!isAdmin) return { ...base, ...money };
         const snap = (o.deliveryAddressSnapshot || {}) as { phone?: string; fullName?: string };
         const display = customerDisplayPhone(o.customer?.phone, snap.phone, isPhone);
@@ -913,7 +930,9 @@ export async function PATCH(req: Request) {
             orderId: order.id,
             requestedById: session.user.id,
             reason: `Order returned — ${reason || "returned"}`,
-          }).catch(() => {});
+          }).catch((e) => {
+            console.error("[order-returned] auto-refund failed", order.id, e instanceof Error ? e.message : e);
+          });
         }
       }
 

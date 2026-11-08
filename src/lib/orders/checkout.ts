@@ -591,7 +591,7 @@ export async function createCheckoutOrder(input: CheckoutInput) {
   // A customer could accept a cheap bid on a small/near cart, then add stores or
   // check out to a farther address — the snapshot fee/rider no longer apply, so we
   // drop the bid entirely (fee + rider + link) and fall back to the standard fee.
-  const acceptedBid = (() => {
+  let acceptedBid = (() => {
     if (!rawAcceptedBid) return null;
     const snap = rawAcceptedBid.summary ?? {};
     const snapStores =
@@ -605,6 +605,14 @@ export async function createCheckoutOrder(input: CheckoutInput) {
     }
     return rawAcceptedBid;
   })();
+  // Re-check the winning rider is STILL eligible — they may have become
+  // COD-restricted, suspended or offline during the acceptance window. Don't
+  // pre-assign an order to an ineligible rider; fall back to the standard fee.
+  if (acceptedBid) {
+    const { riderBidEligibility } = await import("@/lib/riders/eligibility");
+    const elig = await riderBidEligibility(acceptedBid.riderId);
+    if (!elig.eligible) acceptedBid = null;
+  }
   const deliveryFee = acceptedBid ? acceptedBid.fee : delivery.fee;
   const grandTotal = productTotal + deliveryFee;
   const payProductsOnline = wantsOnlineProducts(input.productPaymentChoice);

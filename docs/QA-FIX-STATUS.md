@@ -6,7 +6,7 @@ Every finding from "MandiBazaar QA-Report" (Hassan, 1–4 Nov 2026), with its st
 - **Fixed**: changed in code and verified (unit tests, API tests, browser check).
 - **Passed**: QA already passed it; no change needed (small suggestions applied where noted).
 - **Data**: the code is ready; the owner must fix live data in the admin panel (see "Owner actions").
-- **Staging**: needs a staging copy with Stripe test mode to test end to end.
+- **Staging**: needs a staging copy to test end to end (JazzCash sandbox + Twilio/Resend test creds). Card/Stripe is DISABLED (COD + JazzCash only) — set STRIPE_ENABLED=true to re-enable.
 
 **Checks run on the final code:** TypeScript clean, 375/375 unit tests, lint clean, production build OK. Browser checks done on desktop and 390px mobile.
 
@@ -16,13 +16,14 @@ Every finding from "MandiBazaar QA-Report" (Hassan, 1–4 Nov 2026), with its st
 
 ### Security (urgent)
 1. Run `crontab -r` in your own Terminal. This removes the last leftover of the malware that was found on the development Mac.
-2. Rotate all secrets: database, Stripe, JazzCash, `NEXTAUTH_SECRET`, `CRON_SECRET`, storage keys, GitHub token, SSH keys, and saved browser passwords.
+2. Rotate all secrets: database, JazzCash, `NEXTAUTH_SECRET`, `CRON_SECRET`, storage keys, GitHub token, SSH keys, and saved browser passwords.
 3. Review every commit by `hello.versecure@gmail.com`. Commit `b55ab76` added hidden malware to `postcss.config.mjs`; it has been removed.
 
 ### Deploy
 1. `npx prisma migrate deploy` (use the Neon **direct**, non-pooled URL). The repo's `prisma/migrations/` holds `0_init` (the full baseline schema) and `20261108172920_add_review_base_price`; `migrate deploy` applies whatever isn't yet on the target DB.
 2. Set these Vercel environment variables:
-   - `CRON_SECRET` (any long random string). Without it, unpaid orders are never cancelled automatically.
+   - **Firebase (REQUIRED — auth source of truth):** `FIREBASE_SERVICE_ACCOUNT` and all `NEXT_PUBLIC_FIREBASE_*` keys. **Also add the production domain** (and any staging domain) under Firebase Console → Authentication → **Authorized domains**, or every login/signup silently fails.
+   - `CRON_SECRET` (any long random string). **Required in production** — without it the cron endpoints fail closed (unpaid-order cancel + remittance sweep won't run; and the x-vercel-cron header alone is no longer trusted).
    - `NEXTAUTH_SECRET`: at least 16 characters.
    - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: these turn on SMS. Once set, signup phone codes, the coupon "verified phone" rule, and admin 2-step SMS codes all become active.
    - `RESEND_API_KEY`, `EMAIL_FROM`: these turn on email codes and order emails. The From domain must be verified in Resend.
@@ -218,7 +219,7 @@ Every finding from "MandiBazaar QA-Report" (Hassan, 1–4 Nov 2026), with its st
 | U5 | Fixed | Settings: per-km rate, maximum fee, commission %, full-COD limit, rider pay |
 
 ### 4. Not tested yet: test on staging
-- Card (Stripe test mode) and JazzCash payment, confirmation, invoice download
+- JazzCash (QR/sandbox) payment + COD, confirmation, invoice download
 - Full order lifecycle: place → store ready → assign rider → out for delivery → delivered/failed
 - Rider COD collection → remittance → admin confirm; rider payout
 - Store payout generation; refunds after cancel or late payment
@@ -226,7 +227,7 @@ Every finding from "MandiBazaar QA-Report" (Hassan, 1–4 Nov 2026), with its st
 
 **Staging setup:**
 1. Create a Neon branch of the database.
-2. Create a Vercel Preview deployment with its own env vars: the Stripe **test** keys, the staging database URL, and Twilio/Resend test credentials.
+2. Create a Vercel Preview deployment with its own env vars: the staging database URL, JazzCash sandbox creds, and Twilio/Resend test credentials. (Card/Stripe is off.)
 3. Run `npx prisma migrate deploy` and `npm run db:seed` on the staging database only.
 4. Give QA the seeded test accounts.
 

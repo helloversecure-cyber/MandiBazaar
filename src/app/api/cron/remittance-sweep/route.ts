@@ -11,9 +11,9 @@ function authorized(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
   // Vercel Cron sends "Authorization: Bearer $CRON_SECRET" when CRON_SECRET is set.
   if (secret) return auth === `Bearer ${secret}`;
-  // No secret configured: accept only the platform scheduler. The job only marks
-  // already-past-deadline remittances overdue and restricts those riders — a spoofed
-  // call cannot do anything the schedule would not do anyway. (Set CRON_SECRET in prod.)
+  // No secret: fail CLOSED in production — the x-vercel-cron header is client-spoofable
+  // and must not be trusted as the only gate. Set CRON_SECRET in production.
+  if (process.env.NODE_ENV === "production") return false;
   const ua = req.headers.get("user-agent") || "";
   return req.headers.get("x-vercel-cron") === "1" || ua.startsWith("vercel-cron/");
 }

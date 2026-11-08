@@ -70,12 +70,14 @@ export async function GET(
       pendingChanges: _pendingChanges,
       pendingChangesAt: _pendingChangesAt,
       moderationNote: _moderationNote,
+      reviewBasePrice: _reviewBasePrice,
       ...publicProduct
     } = product;
     void _costPrice;
     void _pendingChanges;
     void _pendingChangesAt;
     void _moderationNote;
+    void _reviewBasePrice;
 
     const ratingCount = ratingAgg._count._all;
     return apiSuccess({

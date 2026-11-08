@@ -193,7 +193,26 @@ async function imageToDataUrl(imageUrl: string): Promise<string | null> {
       return `data:${mime};base64,${buf.toString("base64")}`;
     }
     if (!imageUrl.startsWith("https://")) return null;
-    const res = await fetch(imageUrl, { redirect: "follow" });
+    // SSRF guard: reject obviously-internal hosts, and don't follow redirects (a
+    // public host could 302 to an internal address).
+    try {
+      const host = new URL(imageUrl).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      const isInternal =
+        host === "localhost" ||
+        host.endsWith(".local") ||
+        host === "0.0.0.0" ||
+        host === "::1" ||
+        /^127\./.test(host) ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+        /^(fd|fe80)/.test(host);
+      if (isInternal) return null;
+    } catch {
+      return null;
+    }
+    const res = await fetch(imageUrl, { redirect: "error" });
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
     if (!contentType.startsWith("image/")) return null;

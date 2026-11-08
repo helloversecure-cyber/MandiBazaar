@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import {
   getStripe,
   getStripeWebhookSecret,
+  isStripeConfigured,
   processStripeCheckoutCompleted,
   processStripePaymentIntentSucceeded,
 } from "@/lib/payments/stripe";
@@ -58,6 +59,7 @@ async function notifyStripeResult(result: {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isStripeConfigured()) return apiError("Stripe is disabled", 503);
   const webhookSecret = getStripeWebhookSecret();
   const body = await req.text();
   const sig = headers().get("stripe-signature");

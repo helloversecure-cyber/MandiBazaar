@@ -4,6 +4,7 @@ import { reviewSchema } from "@/lib/validators/schemas";
 import { writeAuditLog } from "@/lib/audit";
 import { apiError, apiSuccess, apiZodError, paginationMeta, parsePagination } from "@/lib/utils";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { rateLimit } from "@/lib/rate-limit";
 import { Prisma, ReviewStatus } from "@prisma/client";
 
 export async function GET(req: Request) {
@@ -90,6 +91,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session?.user?.id) return apiError("Unauthorized", 401);
+  const rl = rateLimit(`review:${session.user.id}`, 10, 60_000);
+  if (!rl.ok) return apiError("Too many reviews — please wait a minute.", 429);
 
   const parsed = reviewSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return apiZodError(parsed.error);

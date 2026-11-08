@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/auth";
 import {
   getStripe,
+  isStripeConfigured,
   processStripePaymentIntentSucceeded,
 } from "@/lib/payments/stripe";
 import { notifyOrderEvent } from "@/lib/notifications/service";
@@ -12,6 +13,7 @@ import { apiError, apiSuccess } from "@/lib/utils";
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.user?.id) return apiError("Please sign in", 401);
+  if (!isStripeConfigured()) return apiError("Card payments are disabled", 503);
 
   try {
     const body = await req.json();

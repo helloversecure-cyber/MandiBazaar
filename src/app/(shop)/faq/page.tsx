@@ -23,7 +23,7 @@ export default async function FaqPage() {
     },
     {
       q: "How can I pay?",
-      a: "The delivery fee is paid online when you place the order (card, or JazzCash with a receipt). You can pay for the products online or in cash to the rider on delivery.",
+      a: "The delivery fee is paid online when you place the order (JazzCash with a receipt). You can pay for the products online via JazzCash, or in cash to the rider on delivery.",
     },
     {
       q: "Can I pay everything in cash on delivery?",
