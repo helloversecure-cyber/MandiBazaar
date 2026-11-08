@@ -86,6 +86,38 @@ export default function OrderDetailPage() {
     load();
   }, [load]);
 
+  // Mark items already reviewed on THIS order so they show a "submitted" state
+  // instead of a blank form that would 409 on re-submit.
+  useEffect(() => {
+    const orderId = order?.id;
+    if (!orderId) return;
+    let cancelled = false;
+    fetch("/api/reviews?mine=true")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d?.success) return;
+        const pids = (d.data as Array<{ productId: string; orderId: string }>)
+          .filter((rv) => rv.orderId === orderId)
+          .map((rv) => rv.productId);
+        if (!pids.length) return;
+        setReviews((prev) => {
+          const next = { ...prev };
+          for (const pid of pids) {
+            next[pid] = {
+              rating: next[pid]?.rating ?? 0,
+              comment: next[pid]?.comment ?? "",
+              submitted: true,
+            };
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.id]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const notice = new URLSearchParams(window.location.search).get("notice");
@@ -388,12 +420,14 @@ export default function OrderDetailPage() {
             Refundable online amount: {formatCurrency(refundable)}
             {paidOnline > 0 ? ` (ledger paid ${formatCurrency(paidOnline)})` : ""}
           </p>
+          <label className="mb-1 block text-sm font-medium text-ink">Reason for refund</label>
           <textarea
             className="w-full rounded-xl border border-line bg-app px-4 py-3 text-sm outline-none focus:border-brand-400 focus:bg-card focus:ring-2 focus:ring-brand-100"
-            placeholder="Reason for refund"
+            placeholder="Tell us why you're requesting a refund"
             value={refundReason}
             onChange={(e) => setRefundReason(e.target.value)}
             rows={3}
+            maxLength={500}
             required
           />
           <Button type="submit" size="sm" disabled={busy}>
@@ -496,6 +530,7 @@ export default function OrderDetailPage() {
                   <textarea
                     className="mt-3 w-full rounded-xl border border-line bg-app px-4 py-3 text-sm outline-none focus:border-brand-400 focus:bg-card focus:ring-2 focus:ring-brand-100"
                     placeholder="Share your experience (optional)"
+                    maxLength={1000}
                     value={draft.comment}
                     onChange={(e) =>
                       setReviews((prev) => ({

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { formatCurrency } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Package, MapPin, Heart, Star, ArrowRight } from "lucide-react";
+import { Package, MapPin, Heart, Star, Lock, ArrowRight } from "lucide-react";
 
 export default function AccountPage() {
   const { data: session } = useSession();
@@ -26,6 +26,7 @@ export default function AccountPage() {
     { href: "/account/addresses", label: "Addresses", icon: MapPin, desc: "Delivery locations" },
     { href: "/wishlist", label: "Wishlist", icon: Heart, desc: "Saved products" },
     { href: "/account/reviews", label: "Reviews", icon: Star, desc: "Your feedback" },
+    { href: "/account/security", label: "Password", icon: Lock, desc: "Change your password" },
   ];
 
   return (

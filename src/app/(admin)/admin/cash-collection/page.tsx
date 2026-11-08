@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/feedback";
 import { HandCoins, Banknote, CheckCircle2, XCircle, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
 
 type Overview = {
@@ -40,6 +41,7 @@ export default function CashCollectionPage() {
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [msg, setMsg] = useState("");
+  const confirm = useConfirm();
 
   const refresh = useCallback(async () => {
     const [ov, q, l, o] = await Promise.all([
@@ -125,7 +127,16 @@ export default function CashCollectionPage() {
                   <td className={r.overdue > 0 ? "font-bold text-red-600" : "text-ink-subtle"}>{formatCurrency(r.overdue)}</td>
                   <td>{r.restricted ? <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600"><AlertTriangle className="h-3 w-3" />Restricted</span> : <span className="text-xs text-emerald-600">OK</span>}</td>
                   <td>{r.restricted && (
-                    <button onClick={() => { const reason = prompt("Reason for clearing this rider's COD restriction?"); if (reason) void act({ action: "CLEAR_RESTRICTION", riderId: r.riderId, reason }, "Restriction cleared"); }}
+                    <button onClick={async () => {
+                        const { confirmed, reason } = await confirm({
+                          title: `Clear ${r.name}'s COD restriction?`,
+                          message: "The rider will be able to take COD orders again.",
+                          confirmLabel: "Clear restriction",
+                          tone: "danger",
+                          reason: { label: "Reason", required: true, minLength: 3, placeholder: "e.g. settled offline" },
+                        });
+                        if (confirmed && reason) void act({ action: "CLEAR_RESTRICTION", riderId: r.riderId, reason }, "Restriction cleared");
+                      }}
                       className="rounded-lg border border-line px-2 py-1 text-xs font-semibold text-ink-muted hover:bg-app">Clear</button>
                   )}</td>
                 </tr>
@@ -179,6 +190,41 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 function QueueCard({ s, onAct }: { s: Sub; onAct: (body: Record<string, unknown>, ok: string) => Promise<void> }) {
   const [amount, setAmount] = useState(String(s.amount));
+  const confirm = useConfirm();
+
+  async function confirmHandover() {
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      await confirm({ title: "Enter the cash amount", message: "Type the actual cash received before confirming.", confirmLabel: "OK" });
+      return;
+    }
+    const { confirmed } = await confirm({
+      title: "Confirm cash received?",
+      message: `Record ${formatCurrency(amt)} received from ${s.rider?.name ?? "this rider"}. This settles their obligation and can lift a COD restriction.`,
+      confirmLabel: "Confirm received",
+    });
+    if (confirmed) void onAct({ action: "CONFIRM_HANDOVER", submissionId: s.id, decision: "APPROVE", confirmedAmount: amt }, "Handover confirmed");
+  }
+
+  async function reject(action: "CONFIRM_HANDOVER" | "REVIEW_PROOF", what: string) {
+    const { confirmed, reason } = await confirm({
+      title: `Reject this ${what}?`,
+      message: `${s.rider?.name ?? "The rider"} will be told it wasn't accepted.`,
+      confirmLabel: "Reject",
+      tone: "danger",
+      reason: { label: "Reason (shown to the rider)", required: true, minLength: 3 },
+    });
+    if (confirmed && reason) void onAct({ action, submissionId: s.id, decision: "REJECT", rejectionReason: reason }, "Rejected");
+  }
+
+  async function approveProof() {
+    const { confirmed } = await confirm({
+      title: "Verify this payment?",
+      message: `Approve ${formatCurrency(s.amount)} from ${s.rider?.name ?? "this rider"} as received.`,
+      confirmLabel: "Verify & approve",
+    });
+    if (confirmed) void onAct({ action: "REVIEW_PROOF", submissionId: s.id, decision: "APPROVE" }, "Payment verified");
+  }
   const handover = s.method === "CASH_HANDOVER";
   return (
     <div className="rounded-2xl border border-line bg-card p-4">
@@ -203,18 +249,18 @@ function QueueCard({ s, onAct }: { s: Sub; onAct: (body: Record<string, unknown>
             <span className="text-xs text-ink-subtle">Rs</span>
             <input type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} className="w-24 bg-transparent px-2 py-1.5 text-sm outline-none" />
           </div>
-          <Button size="sm" className="gap-1" onClick={() => void onAct({ action: "CONFIRM_HANDOVER", submissionId: s.id, decision: "APPROVE", confirmedAmount: Number(amount) }, "Handover confirmed")}>
+          <Button size="sm" className="gap-1" onClick={() => void confirmHandover()}>
             <CheckCircle2 className="h-3.5 w-3.5" /> Confirm received
           </Button>
-          <button onClick={() => { const reason = prompt("Reason for rejecting this handover?"); if (reason) void onAct({ action: "CONFIRM_HANDOVER", submissionId: s.id, decision: "REJECT", rejectionReason: reason }, "Rejected"); }}
+          <button onClick={() => void reject("CONFIRM_HANDOVER", "handover")}
             className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Reject</button>
         </div>
       ) : (
         <div className="mt-3 flex gap-2">
-          <Button size="sm" className="gap-1" onClick={() => void onAct({ action: "REVIEW_PROOF", submissionId: s.id, decision: "APPROVE" }, "Payment verified")}>
+          <Button size="sm" className="gap-1" onClick={() => void approveProof()}>
             <CheckCircle2 className="h-3.5 w-3.5" /> Verify &amp; approve
           </Button>
-          <button onClick={() => { const reason = prompt("Reason for rejecting this proof?"); if (reason) void onAct({ action: "REVIEW_PROOF", submissionId: s.id, decision: "REJECT", rejectionReason: reason }, "Rejected"); }}
+          <button onClick={() => void reject("REVIEW_PROOF", "proof")}
             className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">
             <XCircle className="h-3.5 w-3.5" /> Reject
           </button>

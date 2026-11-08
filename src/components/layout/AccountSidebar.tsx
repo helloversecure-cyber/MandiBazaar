@@ -10,6 +10,7 @@ import {
   Heart,
   Star,
   Bell,
+  Lock,
   LogOut,
   ChevronRight,
   HelpCircle,
@@ -23,6 +24,7 @@ const links = [
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/account/reviews", label: "Reviews", icon: Star },
   { href: "/account/notifications", label: "Notifications", icon: Bell },
+  { href: "/account/security", label: "Password", icon: Lock },
 ];
 
 /** F6: reopen the welcome tour (never forced once done). */

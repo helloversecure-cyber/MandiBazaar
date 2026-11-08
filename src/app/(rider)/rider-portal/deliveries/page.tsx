@@ -48,6 +48,7 @@ type Order = {
 
 export default function RiderDeliveriesPage() {
   const [items, setItems] = useState<Order[]>([]);
+  const [pending, setPending] = useState(false);
   const [filter, setFilter] = useState("");
   const [msg, setMsgRaw] = useState("");
   const [msgError, setMsgError] = useState(false);
@@ -74,6 +75,7 @@ export default function RiderDeliveriesPage() {
     const res = await fetch(`/api/rider?${params}`, { cache: "no-store" });
     const json = await res.json();
     if (json.success) {
+      setPending(Boolean(json.data.pendingApproval));
       setItems(json.data.items);
       setTotal(json.data.pagination?.total ?? json.data.items.length);
       setTotalPages(json.data.pagination?.totalPages ?? 1);
@@ -151,6 +153,22 @@ export default function RiderDeliveriesPage() {
 
   function hasPendingProof(o: Order) {
     return (o.paymentProofs || []).some((p) => p.status === "PENDING_REVIEW");
+  }
+
+  if (pending) {
+    return (
+      <div className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
+        <p className="text-4xl">⏳</p>
+        <h1 className="mt-3 text-2xl font-extrabold text-amber-950">Waiting for MandiBazaar</h1>
+        <p className="mt-2 text-sm text-amber-900">
+          Your account is being reviewed. Deliveries will be assigned once MandiBazaar
+          approves you.
+        </p>
+        <Button className="mt-6" variant="outline" onClick={() => void load()}>
+          Refresh status
+        </Button>
+      </div>
+    );
   }
 
   return (

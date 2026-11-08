@@ -26,6 +26,7 @@ import {
   type ProductImageRef,
   type ReviewedFields,
 } from "@/lib/validators/product-rules";
+import { isUploadUrl } from "@/lib/validators/signup-forms";
 
 type SessionLike = { user: { id: string; role?: string | null } };
 
@@ -41,7 +42,9 @@ const FIELD_KEYS = [
 ] as const;
 
 function isAllowedImageUrl(u: string) {
-  return u.startsWith("/uploads/") || u.startsWith("https://");
+  // Reuse the signup upload-URL rule: /uploads or https only, ≤1000 chars, no
+  // whitespace/quote injection — stricter than the old prefix-only check.
+  return isUploadUrl(u);
 }
 
 /** Parse body.imageUrls (or legacy body.imageUrl). undefined = not sent. */
@@ -167,9 +170,14 @@ export async function createStoreProduct(
     }
   }
 
+  // Accept a client-supplied SKU only if it's well-formed; otherwise auto-generate
+  // (the store form never sends one, so this just hardens a direct API call).
+  const providedSku =
+    typeof body.sku === "string" && /^[A-Za-z0-9._-]{2,50}$/.test(body.sku.trim())
+      ? body.sku.trim()
+      : null;
   const sku =
-    (typeof body.sku === "string" && body.sku.trim().slice(0, 50)) ||
-    `S${storeId.slice(-4).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    providedSku || `S${storeId.slice(-4).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
   let slug = slugify(data.name) || `product-${Date.now().toString(36)}`;
   const base = slug;
