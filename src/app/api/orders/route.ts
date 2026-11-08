@@ -6,7 +6,7 @@ import {
   canAssignRider,
   validateAdminStatusChange,
 } from "@/lib/orders/state-machine";
-import { finalizeSale } from "@/lib/inventory/stock";
+import { finalizeSale, releaseReservedStock, restockReturnedSale } from "@/lib/inventory/stock";
 import { markRemittanceReceived } from "@/lib/finance/admin-remittance";
 import { writeAuditLog } from "@/lib/audit";
 import {
@@ -720,6 +720,14 @@ export async function PATCH(req: Request) {
       if (!rider || rider.approvalStatus !== "APPROVED" || !rider.isActive) {
         return apiError("Choose an approved, active rider", 400);
       }
+      // Same rule as self-serve bidding: a rider with unremitted overdue COD can't
+      // take new deliveries until they settle (don't bypass it via admin assignment).
+      if (rider.codRestrictedAt) {
+        return apiError(
+          "This rider has overdue COD cash and can't take new deliveries until it's settled.",
+          400
+        );
+      }
       if (order.riderId === rid && order.orderStatus === "ASSIGNED_TO_RIDER") {
         return apiError("This rider is already assigned", 400);
       }
@@ -861,6 +869,32 @@ export async function PATCH(req: Request) {
             // H: fix the rider's pay for this delivery (idempotent)
             await recordRiderFeeForOrder(tx, order.id);
           }
+
+          if (to === "RETURNED") {
+            // Put the goods back: a DELIVERED order had its stock finalized (restock
+            // + reduce sold); a pre-delivered order still has it reserved (release it).
+            const wasDelivered = order.orderStatus === "DELIVERED";
+            for (const item of order.items) {
+              if (!item.productId) continue;
+              if (wasDelivered) {
+                await restockReturnedSale(tx, {
+                  productId: item.productId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  orderId: order.id,
+                  createdById: session.user.id,
+                });
+              } else {
+                await releaseReservedStock(tx, {
+                  productId: item.productId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  orderId: order.id,
+                  createdById: session.user.id,
+                });
+              }
+            }
+          }
           await syncFulfillmentsToOrderStatus(tx, order.id, to);
           return true;
         });
@@ -870,6 +904,16 @@ export async function PATCH(req: Request) {
         // Ask the customer to confirm receipt once an admin marks it delivered.
         if (to === "DELIVERED") {
           await sendDeliveryConfirmationRequest(order.id);
+        }
+        // A returned order refunds any money already paid (same as cancel). No-op
+        // for unpaid COD orders — createRefundAfterCancel only acts on a paid amount.
+        if (to === "RETURNED") {
+          const { createRefundAfterCancel } = await import("@/lib/orders/refunds");
+          await createRefundAfterCancel({
+            orderId: order.id,
+            requestedById: session.user.id,
+            reason: `Order returned — ${reason || "returned"}`,
+          }).catch(() => {});
         }
       }
 

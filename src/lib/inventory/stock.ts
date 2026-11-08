@@ -169,6 +169,57 @@ export async function finalizeSale(
   });
 }
 
+/**
+ * Reverse a finalized sale when a DELIVERED order is RETURNED: add the units back
+ * to stock, reduce soldQuantity, and record a RETURN transaction. Idempotent per
+ * (order, product, variant).
+ */
+export async function restockReturnedSale(
+  tx: Tx,
+  opts: {
+    productId: string;
+    variantId?: string | null;
+    quantity: number;
+    orderId: string;
+    createdById?: string;
+  }
+) {
+  const { productId, variantId, quantity, orderId, createdById } = opts;
+  const already = await tx.inventoryTransaction.findFirst({
+    where: { orderId, productId, variantId: variantId || null, type: InventoryTxnType.RETURN },
+    select: { id: true },
+  });
+  if (already) return;
+  const current = await getAvailable(tx, productId, variantId);
+  const newStock = current.stock + quantity;
+  if (variantId) {
+    await tx.productVariant.update({
+      where: { id: variantId },
+      data: { stockQuantity: { increment: quantity } },
+    });
+  }
+  await tx.product.update({
+    where: { id: productId },
+    data: {
+      stockQuantity: variantId ? undefined : { increment: quantity },
+      soldQuantity: { decrement: quantity },
+    },
+  });
+  await tx.inventoryTransaction.create({
+    data: {
+      productId,
+      variantId: variantId || null,
+      type: InventoryTxnType.RETURN,
+      quantity,
+      previousStock: current.stock,
+      newStock,
+      orderId,
+      note: `Returned ${quantity}`,
+      createdById,
+    },
+  });
+}
+
 export async function adjustStock(
   productId: string,
   quantity: number,

@@ -13,7 +13,9 @@ const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   OUT_FOR_DELIVERY: [OrderStatus.DELIVERED, OrderStatus.FAILED, OrderStatus.RETURNED],
   DELIVERED: [OrderStatus.RETURNED],
   CANCELLED: [],
-  FAILED: [OrderStatus.PENDING_PAYMENT],
+  // FAILED is terminal (it's in TERMINAL_ORDER_STATUSES and admin next-statuses
+  // exclude any edge out of it). No code performs a FAILED→retry transition.
+  FAILED: [],
   RETURNED: [],
 };
 

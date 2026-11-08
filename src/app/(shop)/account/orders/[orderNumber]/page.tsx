@@ -240,8 +240,9 @@ export default function OrderDetailPage() {
       setBusy(false);
       setMsg(
         form
-          ? "JazzCash is not available on this site. Card payment should be used instead."
-          : data.error || "Could not resume payment — try again or contact support."
+          ? "JazzCash isn't available right now. Please try again shortly or contact support."
+          : data.error || "Could not resume payment — try again or contact support.",
+        true
       );
       return;
     }

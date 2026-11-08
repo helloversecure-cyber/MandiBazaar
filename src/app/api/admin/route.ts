@@ -70,7 +70,9 @@ export async function GET(req: NextRequest) {
       if (assignableOnly) {
         // Assign-rider dropdown (admin orders): every assignable rider, unpaginated.
         const items = await prisma.rider.findMany({
-          where: { approvalStatus: "APPROVED", isActive: true },
+          // COD-restricted riders can't take new deliveries, so keep them out of the
+          // assign dropdown (matches the server-side assignment guard).
+          where: { approvalStatus: "APPROVED", isActive: true, codRestrictedAt: null },
           select: { id: true, name: true, phone: true },
           orderBy: { name: "asc" },
         });

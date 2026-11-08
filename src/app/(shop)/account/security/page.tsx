@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Lock, Eye, EyeOff, CheckCircle2, AlertTriangle } from "lucide-react";
@@ -18,6 +19,8 @@ function passwordError(v: string): string | null {
 
 export default function SecurityPage() {
   const forced = useSearchParams().get("forced") === "1";
+  const router = useRouter();
+  const { update } = useSession();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -63,6 +66,16 @@ export default function SecurityPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      // Refresh the JWT so the mustChangePassword flag (now false in the DB) is
+      // reloaded — otherwise the forced-change middleware gate keeps redirecting back.
+      try {
+        await update();
+      } catch {
+        /* best-effort */
+      }
+      if (forced) {
+        setTimeout(() => router.replace("/"), 900);
+      }
     } catch {
       setFormError("Something went wrong. Please try again.");
     } finally {

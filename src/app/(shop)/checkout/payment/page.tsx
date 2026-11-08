@@ -84,6 +84,14 @@ function PaymentStatus() {
         return;
       }
 
+      if (data.data.requiresJazzCashQr && data.data.jazzcashQr) {
+        const q = data.data.jazzcashQr;
+        window.location.assign(
+          `/checkout/jazzcash-qr?order=${encodeURIComponent(q.orderNumber)}&orderId=${encodeURIComponent(q.orderId)}&amount=${encodeURIComponent(String(q.amountPkr))}`
+        );
+        return;
+      }
+
       if (data.data.stripeCheckout?.url) {
         window.location.assign(data.data.stripeCheckout.url);
         return;
@@ -93,7 +101,7 @@ function PaymentStatus() {
       if (!form?.isConfigured) {
         setMsg(
           form
-            ? "JazzCash is not available. Use card payment or contact support."
+            ? "JazzCash isn't available right now. Please retry from My orders, or contact support."
             : "No payment method is configured. Please try again later."
         );
         setBusy(false);
