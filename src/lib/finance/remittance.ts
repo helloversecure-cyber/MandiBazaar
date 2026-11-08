@@ -401,6 +401,41 @@ export async function adjustRemittanceForRefund(
   if (remit.riderId) await clearRiderCodRestrictionIfSettled(db, remit.riderId);
 }
 
+/**
+ * Full return/cancel of a COD order: the rider must NOT be chased for cash on
+ * goods that came back. A pure-COD order has no online refund, so the refund
+ * ledger (adjustRemittanceForRefund) never runs — this cancels the remaining
+ * product obligation directly, down to what the rider already verified-remitted,
+ * and lifts any COD restriction if the rider is now settled. No-op when the
+ * platform already holds the cash (status RECEIVED) — the refund ledger reverses
+ * store earnings there instead. Idempotent (re-running finds nothing to cancel).
+ */
+export async function cancelRemittanceForReturn(
+  db: Db,
+  opts: { orderId: string; reason?: string }
+): Promise<void> {
+  const remit = await db.cashRemittance.findUnique({
+    where: { orderId: opts.orderId },
+    select: { id: true, riderId: true, amountDue: true, amountRemitted: true, status: true, notes: true },
+  });
+  if (!remit) return;
+  if (remit.status === "RECEIVED") return;
+
+  const amountDue = Number(remit.amountDue);
+  const amountRemitted = Number(remit.amountRemitted);
+  const newDue = r2(Math.max(amountRemitted, 0));
+  if (newDue >= amountDue) return;
+
+  const label = opts.reason ? `order returned (${opts.reason})` : "order returned";
+  const note = `Cancelled — ${label} (−Rs ${r2(amountDue - newDue).toLocaleString("en-PK")})`.slice(0, 300);
+  await db.cashRemittance.update({
+    where: { id: remit.id },
+    data: { amountDue: newDue, notes: [remit.notes, note].filter(Boolean).join(" · ").slice(0, 500) },
+  });
+  await recomputeRemittance(db, remit.id);
+  if (remit.riderId) await clearRiderCodRestrictionIfSettled(db, remit.riderId);
+}
+
 export type OverdueSweepResult = { markedOverdue: number; ridersRestricted: number };
 
 /**

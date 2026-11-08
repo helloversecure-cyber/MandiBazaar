@@ -952,6 +952,13 @@ export async function PATCH(req: Request) {
           }).catch((e) => {
             console.error("[order-returned] auto-refund failed", order.id, e instanceof Error ? e.message : e);
           });
+          // COD cash side: a returned order's goods are back, so the rider must not
+          // owe (or be COD-restricted for) cash on them. The online refund above is a
+          // no-op for pure-COD orders, so cancel the remittance obligation directly.
+          const { cancelRemittanceForReturn } = await import("@/lib/finance/remittance");
+          await cancelRemittanceForReturn(prisma, { orderId: order.id, reason: reason || undefined }).catch((e) => {
+            console.error("[order-returned] remittance cancel failed", order.id, e instanceof Error ? e.message : e);
+          });
         }
       }
 

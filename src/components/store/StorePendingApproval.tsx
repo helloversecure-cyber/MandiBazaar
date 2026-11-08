@@ -79,6 +79,24 @@ export function StorePendingApproval({ reason }: { reason?: string | null }) {
           </p>
         )}
 
+        {!suspended && !canReapply && (
+          <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-900">
+            <p className="font-semibold">What happens next</p>
+            <ul className="mt-1.5 space-y-1 text-emerald-800">
+              <li>• Reviews usually finish within 1–2 business days.</li>
+              <li>• Once approved, you can add products and start selling right away.</li>
+              <li>• Keep your shop name, categories and payout details handy.</li>
+            </ul>
+            <p className="mt-2 text-emerald-800">
+              Questions? Email{" "}
+              <a href="mailto:hello@mandibazaar.pk" className="font-semibold underline">
+                hello@mandibazaar.pk
+              </a>
+              .
+            </p>
+          </div>
+        )}
+
         <div className="mt-7 space-y-3">
           {suspended ? null : canReapply ? (
             <Button href="/store-portal/reapply" className="w-full gap-2">

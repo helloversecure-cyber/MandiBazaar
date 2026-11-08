@@ -282,7 +282,28 @@ export async function PATCH(req: Request) {
       const previous = await prisma.product.findUnique({ where: { id } });
       if (!previous) return apiError("Product not found", 404);
 
-      const product = await prisma.product.update({ where: { id }, data });
+      // Harden the generic scalar edit: this path must not reassign ownership,
+      // defeat the ±20% price-review gate, rewrite identity/slug, or touch
+      // system-maintained counters. Strip protected keys and reject bad numbers.
+      const PROTECTED_PRODUCT_FIELDS = new Set([
+        "id", "storeId", "store", "slug", "reviewBasePrice", "pendingChanges",
+        "pendingChangesAt", "soldQuantity", "reservedStock", "category",
+        "images", "variants", "inventoryTxns", "cartItems", "wishlistItems",
+        "reviews", "createdAt", "updatedAt",
+      ]);
+      const safeData: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries((data ?? {}) as Record<string, unknown>)) {
+        if (PROTECTED_PRODUCT_FIELDS.has(k)) continue;
+        safeData[k] = v;
+      }
+      for (const numKey of ["price", "salePrice", "costPrice", "stockQuantity", "lowStockThreshold"]) {
+        const val = safeData[numKey];
+        if (val != null && (Number.isNaN(Number(val)) || Number(val) < 0)) {
+          return apiError(`Invalid ${numKey}`, 400);
+        }
+      }
+
+      const product = await prisma.product.update({ where: { id }, data: safeData });
       await writeAuditLog({
         userId: session.user.id,
         action: "PRODUCT_UPDATED",
@@ -291,7 +312,7 @@ export async function PATCH(req: Request) {
         previousValue: previous
           ? { price: toNumber(previous.price), stock: previous.stockQuantity }
           : undefined,
-        newValue: data,
+        newValue: safeData,
       });
       return apiSuccess(product);
     }

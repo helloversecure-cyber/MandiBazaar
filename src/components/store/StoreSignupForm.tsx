@@ -136,7 +136,13 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
       [...selectedCategoryNames, ...customCategories].map((n) => n.toLowerCase())
     );
     if (taken.has(name.toLowerCase())) {
+      // Don't silently swallow the text — tell them it's already in the list.
+      setErrors((prev) => ({ ...prev, otherCategoryName: `"${name}" is already added` }));
       setCustomInput("");
+      return;
+    }
+    if (customCategories.length >= 20) {
+      setErrors((prev) => ({ ...prev, otherCategoryName: "You can add up to 20 categories" }));
       return;
     }
     setCustomCategories((prev) => (prev.length >= 20 ? prev : [...prev, name.slice(0, 40)]));

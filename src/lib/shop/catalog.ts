@@ -210,8 +210,11 @@ export async function listProducts(
   }
 
   if (categoryKey) {
+    // Only active categories are browsable — a deactivated category is hidden from
+    // the nav picker, so a direct ?category=<slug> link must not surface its products
+    // either (consistent "hidden from nav == hidden from listing").
     const cat = await prisma.category.findFirst({
-      where: { OR: [{ slug: categoryKey }, { id: categoryKey }] },
+      where: { isActive: true, OR: [{ slug: categoryKey }, { id: categoryKey }] },
       select: { id: true, name: true, slug: true },
     });
     context.category = cat;
