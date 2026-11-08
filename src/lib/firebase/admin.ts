@@ -142,9 +142,19 @@ export async function passwordResetLink(email: string, continueUrl: string): Pro
 // so our own pages apply the oobCode.
 // ---------------------------------------------------------------------------
 
-async function sendOobCode(payload: Record<string, unknown>): Promise<boolean> {
+/** Firebase error codes that mean the custom continueUrl/domain was the problem. */
+const CONTINUE_URI_ERRORS = [
+  "UNAUTHORIZED_CONTINUE_URI",
+  "INVALID_CONTINUE_URI",
+  "MISSING_CONTINUE_URI",
+  "INVALID_DYNAMIC_LINK_DOMAIN",
+  "UNAUTHORIZED_DOMAIN",
+  "Domain not allowlisted",
+];
+
+async function sendOobCode(payload: Record<string, unknown>): Promise<{ ok: boolean; reason: string }> {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
-  if (!apiKey) return false;
+  if (!apiKey) return { ok: false, reason: "NO_API_KEY" };
   try {
     const res = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
@@ -154,25 +164,40 @@ async function sendOobCode(payload: Record<string, unknown>): Promise<boolean> {
         body: JSON.stringify(payload),
       }
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[firebase] sendOobCode ${payload.requestType} failed: HTTP ${res.status} ${body.slice(0, 320)}`);
-    }
-    return res.ok;
+    if (res.ok) return { ok: true, reason: "" };
+    const body = await res.text().catch(() => "");
+    console.error(`[firebase] sendOobCode ${payload.requestType} failed: HTTP ${res.status} ${body.slice(0, 320)}`);
+    return { ok: false, reason: body };
   } catch (e) {
     console.error("[firebase] sendOobCode error", e instanceof Error ? e.message : e);
-    return false;
+    return { ok: false, reason: "FETCH_ERROR" };
   }
+}
+
+/**
+ * Send an oob email, retrying WITHOUT the custom continueUrl only when the custom
+ * continueUrl/domain was the cause — never on throttling (TOO_MANY_ATTEMPTS) or
+ * other errors, so we don't burn Firebase's send quota with a pointless second call.
+ */
+async function sendOobWithContinueUrlFallback(
+  base: Record<string, unknown>,
+  continueUrl: string
+): Promise<boolean> {
+  const first = await sendOobCode({ ...base, continueUrl });
+  if (first.ok) return true;
+  if (CONTINUE_URI_ERRORS.some((code) => first.reason.includes(code))) {
+    const retry = await sendOobCode(base);
+    return retry.ok;
+  }
+  return false;
 }
 
 /** Ask Firebase to EMAIL a password-reset link to this address. */
 export async function firebaseSendPasswordResetEmail(email: string, continueUrl: string): Promise<boolean> {
-  const addr = email.trim().toLowerCase();
-  // Some projects reject a custom continueUrl on sendOobCode (HTTP 400). Fall back
-  // to Firebase's default action handler, which always works.
-  const withUrl = await sendOobCode({ requestType: "PASSWORD_RESET", email: addr, continueUrl });
-  if (withUrl) return true;
-  return sendOobCode({ requestType: "PASSWORD_RESET", email: addr });
+  return sendOobWithContinueUrlFallback(
+    { requestType: "PASSWORD_RESET", email: email.trim().toLowerCase() },
+    continueUrl
+  );
 }
 
 /** Ask Firebase to EMAIL a verification link (needs the user's password for the idToken). */
@@ -194,12 +219,12 @@ export async function firebaseSendVerificationEmail(
     );
     const data = (await si.json().catch(() => ({}))) as { idToken?: string };
     if (!data.idToken) return false;
-    // Some projects reject a custom continueUrl on sendOobCode (HTTP 400). Fall back
-    // to Firebase's default action handler (hosted on the project's own domain),
-    // which always works and still marks the email verified.
-    const withUrl = await sendOobCode({ requestType: "VERIFY_EMAIL", idToken: data.idToken, continueUrl });
-    if (withUrl) return true;
-    return sendOobCode({ requestType: "VERIFY_EMAIL", idToken: data.idToken });
+    // Retry without the custom continueUrl ONLY if that was the cause (never on
+    // TOO_MANY_ATTEMPTS etc.) — Firebase's default handler still marks it verified.
+    return sendOobWithContinueUrlFallback(
+      { requestType: "VERIFY_EMAIL", idToken: data.idToken },
+      continueUrl
+    );
   } catch (e) {
     console.error("[firebase] verification send error", e instanceof Error ? e.message : e);
     return false;
