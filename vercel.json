@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/cron/remittance-sweep",
-      "schedule": "0 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
