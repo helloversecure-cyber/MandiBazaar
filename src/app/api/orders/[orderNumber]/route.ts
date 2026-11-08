@@ -124,7 +124,9 @@ export async function GET(
       // received — verifying" instead of telling a customer who already paid via
       // JazzCash QR that they're unpaid and nudging a second payment.
       const myProofs = await prisma.paymentProof.findMany({
-        where: { orderId: order.id },
+        // Customer-uploaded receipts only (riderId null) — never surface a
+        // rider-uploaded proof's status/notes on the customer's own pages.
+        where: { orderId: order.id, riderId: null },
         orderBy: { createdAt: "desc" },
         select: { id: true, status: true, reviewNotes: true, createdAt: true, reviewedAt: true },
       });

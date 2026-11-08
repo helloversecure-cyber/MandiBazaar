@@ -490,7 +490,9 @@ export async function POST(req: Request) {
       if (decision === "APPROVED" && !proof.riderId) {
         const raw = body.receiptAmount;
         if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
-          const receiptAmount = Number(raw);
+          // Normalize the same way the client does (strip grouping commas/spaces),
+          // so a direct "1,000" doesn't become NaN.
+          const receiptAmount = Number(String(raw).replace(/[,\s]/g, ""));
           if (!Number.isFinite(receiptAmount) || receiptAmount < 0) {
             return apiFieldErrors({ receiptAmount: "Enter the amount shown on the receipt" });
           }
