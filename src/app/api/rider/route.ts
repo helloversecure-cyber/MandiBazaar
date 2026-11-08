@@ -27,6 +27,7 @@ import {
   remittanceDue,
   deadlineFrom,
   remittanceDeadlineHours,
+  outstanding,
 } from "@/lib/finance/remittance";
 import { isUsableImageUrl } from "@/lib/orders/proof-review";
 import { recordRiderFeeForOrder } from "@/lib/riders/pay";
@@ -221,9 +222,16 @@ export async function GET(req: NextRequest) {
               }
             : null,
         })),
+        // Real money still owed to MandiBazaar — outstanding(amountDue, amountRemitted),
+        // not total cash collected (which includes the rider's retained delivery fee) —
+        // across every not-yet-settled status, matching the dashboard count.
         pendingTotal: items
-          .filter((r) => r.status === "PENDING" || r.status === "SUBMITTED")
-          .reduce((sum, r) => sum + toNumber(r.amount), 0),
+          .filter((r) =>
+            ["PENDING", "SUBMITTED", "UNDER_VERIFICATION", "PARTIALLY_REMITTED", "OVERDUE"].includes(
+              r.status
+            )
+          )
+          .reduce((sum, r) => sum + outstanding(toNumber(r.amountDue), toNumber(r.amountRemitted)), 0),
       });
     }
 
@@ -361,14 +369,19 @@ export async function PATCH(req: Request) {
         order.productPaymentStatus === "PENDING" ||
         order.paymentMethod === "CASH_ON_DELIVERY" ||
         order.paymentMethod === "MIXED");
-    /** Online product payment — rider must upload customer's payment screenshot */
+    /**
+     * Online product payment the rider must prove with a customer screenshot.
+     * Only the JazzCash manual/at-door case needs this. A STRIPE order is captured
+     * by the gateway upfront (callback sets paymentMethod STRIPE + PAID), so it must
+     * NOT be gated on productPaymentStatus === "PAID" — doing so left fully prepaid
+     * orders un-deliverable (no screenshot exists).
+     */
     const needsOnlineProof =
       !needsCash &&
       remaining <= 0 &&
       // Paid in cash to the rider (COLLECT_CASH before delivery) — no screenshot needed
       !order.cashCollection &&
-      (order.productPaymentStatus === "PAID" ||
-        order.paymentMethod === "JAZZCASH");
+      order.paymentMethod === "JAZZCASH";
     const hasApprovedProof = order.paymentProofs.some(
       (p) => p.status === "APPROVED"
     );
@@ -516,6 +529,11 @@ export async function PATCH(req: Request) {
           where: { id: orderId },
           select: { orderStatus: true },
         });
+        // Strict guard: a re-tap on an already-delivered order must NOT pass
+        // (assertTransition allows DELIVERED→DELIVERED), or stock/cash finalize twice.
+        if (fresh.orderStatus === "DELIVERED") {
+          throw new Error("This order is already marked delivered");
+        }
         assertTransition(fresh.orderStatus, OrderStatus.DELIVERED);
         await tx.order.update({
           where: { id: orderId },
@@ -670,6 +688,17 @@ export async function PATCH(req: Request) {
         return apiError("Please provide a failure reason", 400);
       }
       await prisma.$transaction(async (tx) => {
+        // Lock + re-check inside the tx so two concurrent failures can't each
+        // release the reserved stock (assertTransition allows FAILED→FAILED).
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+        const fresh = await tx.order.findUniqueOrThrow({
+          where: { id: orderId },
+          select: { orderStatus: true },
+        });
+        if (fresh.orderStatus === "FAILED") {
+          throw new Error("This order is already marked failed");
+        }
+        assertTransition(fresh.orderStatus, OrderStatus.FAILED);
         await tx.order.update({
           where: { id: orderId },
           data: {

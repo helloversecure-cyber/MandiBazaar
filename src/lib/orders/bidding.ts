@@ -326,10 +326,21 @@ export async function getAcceptedRequestForCheckout(userId: string) {
       updatedAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, acceptedRiderId: true, acceptedFee: true },
+    select: { id: true, acceptedRiderId: true, acceptedFee: true, summary: true },
   });
   if (!req || !req.acceptedRiderId || req.acceptedFee == null) return null;
-  return { requestId: req.id, riderId: req.acceptedRiderId, fee: Number(req.acceptedFee) };
+  // summary is the snapshot the rider bid on (itemCount/storeCount/distanceKm) —
+  // checkout uses it to confirm the order still matches before honoring the fee.
+  return {
+    requestId: req.id,
+    riderId: req.acceptedRiderId,
+    fee: Number(req.acceptedFee),
+    summary: (req.summary ?? null) as {
+      itemCount?: number;
+      storeCount?: number;
+      distanceKm?: number;
+    } | null,
+  };
 }
 
 /** Link the accepted request to the created order (called inside the checkout transaction). */

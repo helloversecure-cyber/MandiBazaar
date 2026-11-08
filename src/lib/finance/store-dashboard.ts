@@ -80,37 +80,47 @@ export async function storeOrderBreakdown(storeIds: string[], limit = 200): Prom
       settledRate.set(`${p.storeId}:${oid}`, toNumber(p.commissionRate));
     }
 
-  return orders.map((o) => {
-    const storeId = o.items[0]?.storeId ?? storeIds[0];
-    const gross = o.items.reduce((n, i) => n + toNumber(i.finalPrice), 0);
-    const key = `${storeId}:${o.id}`;
-    const isSettled = settledRef.has(key);
-    // Settled rows use the rate snapshotted at payout time; unsettled rows use the
-    // current store/default rate.
-    const rate = isSettled ? settledRate.get(key) ?? map.get(storeId) ?? def : map.get(storeId) ?? def;
+  return orders.flatMap((o) => {
+    // One row per (store, order). An owner with two of their stores in the same
+    // customer order must not have both stores' gross collapsed under one store's
+    // commission rate / settled flag — group the gross by storeId.
+    const grossByStore = new Map<string, number>();
+    for (const i of o.items) {
+      grossByStore.set(i.storeId, (grossByStore.get(i.storeId) ?? 0) + toNumber(i.finalPrice));
+    }
+    if (grossByStore.size === 0) grossByStore.set(storeIds[0], 0);
     // Cancelled / returned orders earn nothing — show them for the record but with
     // zero commission/net so the statement reconciles with the headline figures.
     const earns = o.orderStatus !== "CANCELLED" && o.orderStatus !== "RETURNED";
-    const commission = earns ? commissionFor(gross, rate) : 0;
-    return {
-      orderId: o.id,
-      orderNumber: o.orderNumber,
-      date: o.createdAt,
-      deliveredAt: o.deliveredAt,
-      orderStatus: o.orderStatus,
-      paymentStatus: o.productPaymentStatus,
-      gross: earns ? gross : 0,
-      discount: toNumber(o.discount),
-      commission,
-      net: earns ? Math.max(0, gross - commission) : 0,
-      settled: earns && isSettled,
-      payoutReference: earns ? settledRef.get(key) ?? null : null,
-      heldForCod:
-        earns &&
-        !isSettled &&
-        o.paymentMethod === "CASH_ON_DELIVERY" &&
-        o.cashRemittance?.status !== "RECEIVED",
-    };
+    return Array.from(grossByStore.entries()).map(([storeId, gross], idx) => {
+      const key = `${storeId}:${o.id}`;
+      const isSettled = settledRef.has(key);
+      // Settled rows use the rate snapshotted at payout time; unsettled rows use the
+      // current store/default rate.
+      const rate = isSettled ? settledRate.get(key) ?? map.get(storeId) ?? def : map.get(storeId) ?? def;
+      const commission = earns ? commissionFor(gross, rate) : 0;
+      return {
+        orderId: o.id,
+        orderNumber: o.orderNumber,
+        date: o.createdAt,
+        deliveredAt: o.deliveredAt,
+        orderStatus: o.orderStatus,
+        paymentStatus: o.productPaymentStatus,
+        gross: earns ? gross : 0,
+        // Order-level discount belongs to the order, not each store split — show it
+        // once (on the first store row) so the CSV total doesn't double-count it.
+        discount: idx === 0 ? toNumber(o.discount) : 0,
+        commission,
+        net: earns ? Math.max(0, gross - commission) : 0,
+        settled: earns && isSettled,
+        payoutReference: earns ? settledRef.get(key) ?? null : null,
+        heldForCod:
+          earns &&
+          !isSettled &&
+          o.paymentMethod === "CASH_ON_DELIVERY" &&
+          o.cashRemittance?.status !== "RECEIVED",
+      };
+    });
   });
 }
 

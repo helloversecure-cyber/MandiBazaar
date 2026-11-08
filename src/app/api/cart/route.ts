@@ -286,7 +286,7 @@ export async function PATCH(req: Request) {
         // U2: cap at available stock (reducing is always allowed)
         const targetVariantId = variantId !== undefined ? variantId : item.variantId;
         const variant = targetVariantId
-          ? item.product.variants.find((v) => v.id === targetVariantId)
+          ? item.product.variants.find((v) => v.id === targetVariantId && v.isActive)
           : null;
         if (targetVariantId && !variant) return apiError("Selected variant is unavailable");
         const available = Math.max(
@@ -308,10 +308,26 @@ export async function PATCH(req: Request) {
         });
       }
     } else if (variantId !== undefined) {
-      await prisma.cartItem.update({
-        where: { id: itemId },
-        data: { variantId },
-      });
+      // Variant-only switch: validate the variant belongs to THIS product, is
+      // active and has stock before writing it — otherwise a crafted request
+      // could attach a cheaper/other-product variant and mis-price the line.
+      if (variantId === null) {
+        await prisma.cartItem.update({
+          where: { id: itemId },
+          data: { variantId: null },
+        });
+      } else {
+        const variant = item.product.variants.find(
+          (v) => v.id === variantId && v.isActive
+        );
+        if (!variant) return apiError("Selected variant is unavailable");
+        const available = Math.max(0, variant.stockQuantity - variant.reservedStock);
+        if (available <= 0) return apiError(`${item.product.name} is out of stock.`);
+        await prisma.cartItem.update({
+          where: { id: itemId },
+          data: { variantId, quantity: Math.min(item.quantity, available) },
+        });
+      }
     }
 
     return apiSuccess(await recalculateCart(session.user.id));

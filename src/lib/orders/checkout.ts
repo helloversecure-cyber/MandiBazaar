@@ -586,7 +586,25 @@ export async function createCheckoutOrder(input: CheckoutInput) {
   // bid, that amount IS the delivery fee (and the rider's earning). When no rider
   // is online / no bid is accepted, the order falls back to the standard delivery
   // fee and the store prepares it — a rider is assigned once one is available.
-  const acceptedBid = await getAcceptedRequestForCheckout(input.userId);
+  const rawAcceptedBid = await getAcceptedRequestForCheckout(input.userId);
+  // Only honor an accepted bid if the order still matches what the rider bid on.
+  // A customer could accept a cheap bid on a small/near cart, then add stores or
+  // check out to a farther address — the snapshot fee/rider no longer apply, so we
+  // drop the bid entirely (fee + rider + link) and fall back to the standard fee.
+  const acceptedBid = (() => {
+    if (!rawAcceptedBid) return null;
+    const snap = rawAcceptedBid.summary ?? {};
+    const snapStores =
+      typeof snap.storeCount === "number" ? snap.storeCount : stores.length;
+    const snapDist =
+      typeof snap.distanceKm === "number" ? snap.distanceKm : delivery.distanceKm;
+    // Store set changed, or the drop is materially farther than bid on.
+    if (stores.length !== snapStores) return null;
+    if (delivery.distanceKm > snapDist + 0.5 && delivery.distanceKm > snapDist * 1.15) {
+      return null;
+    }
+    return rawAcceptedBid;
+  })();
   const deliveryFee = acceptedBid ? acceptedBid.fee : delivery.fee;
   const grandTotal = productTotal + deliveryFee;
   const payProductsOnline = wantsOnlineProducts(input.productPaymentChoice);

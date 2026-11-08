@@ -7,6 +7,7 @@ import {
   validateAdminStatusChange,
 } from "@/lib/orders/state-machine";
 import { finalizeSale } from "@/lib/inventory/stock";
+import { markRemittanceReceived } from "@/lib/finance/admin-remittance";
 import { writeAuditLog } from "@/lib/audit";
 import {
   notifyOrderEvent,
@@ -691,24 +692,15 @@ export async function PATCH(req: Request) {
       if (!rem || !rem.riderId) {
         return apiError("This order has no rider cash remittance to receive", 400);
       }
-      if (rem.status === "RECEIVED") return apiError("Already marked as received", 400);
-      if (rem.status === "DISPUTED") return apiError("Resolve the dispute first", 400);
-      await prisma.cashRemittance.update({
-        where: { id: rem.id },
-        data: {
-          status: "RECEIVED",
-          receivedById: session.user.id,
-          receivedAt: new Date(),
-          notes: typeof notes === "string" && notes.trim() ? notes.slice(0, 500) : rem.notes,
-        },
+      // Settling a rider's COD obligation is a remittance-supervisor action, not a
+      // plain order edit. Require the remittance permission and route through the one
+      // authoritative, row-locked path (markRemittanceReceived) so the submission
+      // ledger, amountRemitted and the rider's COD restriction all stay correct.
+      await requireAdmin(PERMISSIONS.REMITTANCES_WRITE);
+      const result = await markRemittanceReceived(session.user.id, rem.id, {
+        notes: typeof notes === "string" ? notes : undefined,
       });
-      await writeAuditLog({
-        userId: session.user.id,
-        action: "REMITTANCE_RECEIVED",
-        entity: "Order",
-        entityId: order.id,
-      });
-      return apiSuccess({ message: "Remittance recorded" });
+      return apiSuccess({ message: "Remittance recorded", ...result });
     }
 
     // --- Assign / re-assign rider -----------------------------------------

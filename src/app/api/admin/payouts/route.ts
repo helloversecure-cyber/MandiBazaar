@@ -422,14 +422,32 @@ export async function POST(req: Request) {
       if (!["PENDING", "SUBMITTED", "RECEIVED"].includes(next)) {
         return apiError("resolveTo must be PENDING, SUBMITTED, or RECEIVED", 400);
       }
+      if (next === "RECEIVED") {
+        // Clear the dispute first, then settle through the authoritative, row-locked
+        // path so the submission ledger, amountRemitted and the rider's COD
+        // restriction all update correctly (a direct status flip skips all three).
+        await prisma.cashRemittance.update({
+          where: { id: body.remittanceId },
+          data: { status: "PENDING", notes: body.notes || existing.notes || "Dispute resolved" },
+        });
+        const result = await markRemittanceReceived(session.user.id, body.remittanceId, {
+          notes: typeof body.notes === "string" ? body.notes : undefined,
+        });
+        await writeAuditLog({
+          userId: session.user.id,
+          action: "REMITTANCE_DISPUTE_RESOLVED",
+          entity: "CashRemittance",
+          entityId: body.remittanceId,
+          previousValue: { status: existing.status },
+          newValue: { status: "RECEIVED" },
+        });
+        return apiSuccess(result);
+      }
       const remittance = await prisma.cashRemittance.update({
         where: { id: body.remittanceId },
         data: {
-          status: next as "PENDING" | "SUBMITTED" | "RECEIVED",
+          status: next as "PENDING" | "SUBMITTED",
           notes: body.notes || existing.notes || "Dispute resolved",
-          ...(next === "RECEIVED"
-            ? { receivedById: session.user.id, receivedAt: new Date() }
-            : {}),
         },
       });
       await writeAuditLog({

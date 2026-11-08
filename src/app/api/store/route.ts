@@ -415,7 +415,14 @@ export async function PATCH(req: Request) {
       if (product.status === "ARCHIVED") {
         return apiError("Product is already removed", 400);
       }
-      if (product.reservedStock > 0) {
+      // Reservations on variant line items live on the variant row, not the
+      // product, so check both — otherwise a variant product with live
+      // reservations could be archived out from under open orders.
+      const reservedVariant = await prisma.productVariant.findFirst({
+        where: { productId, reservedStock: { gt: 0 } },
+        select: { id: true },
+      });
+      if (product.reservedStock > 0 || reservedVariant) {
         return apiError(
           "Cannot remove this product while stock is reserved on unpaid orders. Wait for those orders to complete or expire.",
           400

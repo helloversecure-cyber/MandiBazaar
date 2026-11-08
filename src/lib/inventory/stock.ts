@@ -9,9 +9,13 @@ async function getAvailable(
   variantId?: string | null
 ) {
   if (variantId) {
+    // Lock the row first so concurrent reserve/release/finalize on the same
+    // variant serialize — the read-then-increment below can't oversell.
+    await tx.$queryRaw`SELECT id FROM "ProductVariant" WHERE id = ${variantId} FOR UPDATE`;
     const v = await tx.productVariant.findUniqueOrThrow({ where: { id: variantId } });
     return { stock: v.stockQuantity, reserved: v.reservedStock, available: v.stockQuantity - v.reservedStock };
   }
+  await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${productId} FOR UPDATE`;
   const p = await tx.product.findUniqueOrThrow({ where: { id: productId } });
   return { stock: p.stockQuantity, reserved: p.reservedStock, available: p.stockQuantity - p.reservedStock };
 }
@@ -114,6 +118,18 @@ export async function finalizeSale(
   }
 ) {
   const { productId, variantId, quantity, orderId, createdById } = opts;
+  // Idempotent: if this order already recorded a SALE for this product/variant,
+  // don't decrement stock or increment soldQuantity again (guards double-deliver).
+  const alreadyFinalized = await tx.inventoryTransaction.findFirst({
+    where: {
+      orderId,
+      productId,
+      variantId: variantId || null,
+      type: InventoryTxnType.SALE,
+    },
+    select: { id: true },
+  });
+  if (alreadyFinalized) return;
   const current = await getAvailable(tx, productId, variantId);
   const newStock = current.stock - quantity;
   if (newStock < 0) throw new Error("Insufficient stock to finalize sale");
