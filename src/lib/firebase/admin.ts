@@ -156,7 +156,7 @@ async function sendOobCode(payload: Record<string, unknown>): Promise<boolean> {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error(`[firebase] sendOobCode ${payload.requestType} failed: HTTP ${res.status} ${body.slice(0, 160)}`);
+      console.error(`[firebase] sendOobCode ${payload.requestType} failed: HTTP ${res.status} ${body.slice(0, 320)}`);
     }
     return res.ok;
   } catch (e) {
@@ -167,7 +167,12 @@ async function sendOobCode(payload: Record<string, unknown>): Promise<boolean> {
 
 /** Ask Firebase to EMAIL a password-reset link to this address. */
 export async function firebaseSendPasswordResetEmail(email: string, continueUrl: string): Promise<boolean> {
-  return sendOobCode({ requestType: "PASSWORD_RESET", email: email.trim().toLowerCase(), continueUrl });
+  const addr = email.trim().toLowerCase();
+  // Some projects reject a custom continueUrl on sendOobCode (HTTP 400). Fall back
+  // to Firebase's default action handler, which always works.
+  const withUrl = await sendOobCode({ requestType: "PASSWORD_RESET", email: addr, continueUrl });
+  if (withUrl) return true;
+  return sendOobCode({ requestType: "PASSWORD_RESET", email: addr });
 }
 
 /** Ask Firebase to EMAIL a verification link (needs the user's password for the idToken). */
@@ -189,7 +194,12 @@ export async function firebaseSendVerificationEmail(
     );
     const data = (await si.json().catch(() => ({}))) as { idToken?: string };
     if (!data.idToken) return false;
-    return sendOobCode({ requestType: "VERIFY_EMAIL", idToken: data.idToken, continueUrl });
+    // Some projects reject a custom continueUrl on sendOobCode (HTTP 400). Fall back
+    // to Firebase's default action handler (hosted on the project's own domain),
+    // which always works and still marks the email verified.
+    const withUrl = await sendOobCode({ requestType: "VERIFY_EMAIL", idToken: data.idToken, continueUrl });
+    if (withUrl) return true;
+    return sendOobCode({ requestType: "VERIFY_EMAIL", idToken: data.idToken });
   } catch (e) {
     console.error("[firebase] verification send error", e instanceof Error ? e.message : e);
     return false;
