@@ -74,6 +74,11 @@ export function getStripeWebhookSecret(): string {
 }
 
 export function isStripeConfigured() {
+  // Card / Stripe payments are intentionally DISABLED — MandiBazaar offers only
+  // Cash on Delivery and JazzCash. This single gate turns Stripe off everywhere
+  // (checkout UI card option + the server payment path + /api/payments/config).
+  // To re-enable later: set STRIPE_ENABLED=true and provide the Stripe keys.
+  if (process.env.STRIPE_ENABLED !== "true") return false;
   return Boolean(getStripeSecretKey() && getStripePublishableKey());
 }
 
