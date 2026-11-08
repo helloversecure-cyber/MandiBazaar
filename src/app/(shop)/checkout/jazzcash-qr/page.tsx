@@ -162,6 +162,13 @@ function JazzCashQrPay() {
           <p className="mt-2 text-xs text-ink-subtle">{ussdHint}</p>
         </div>
 
+        <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-center text-xs leading-relaxed text-emerald-900">
+          Payments are collected for MandiBazaar by <strong>{merchantName}</strong>
+          {tillId ? <> (JazzCash Till {tillId})</> : null}. This is the correct
+          payee — after paying, upload your receipt and your order is confirmed
+          once MandiBazaar verifies it.
+        </p>
+
         <div className="mt-8 space-y-3 border-t border-line pt-6">
           <h2 className="text-lg font-bold text-ink">
             Confirm payment
