@@ -201,27 +201,35 @@ export async function generateWeeklyPayouts(opts?: {
   periodEnd?: Date;
   markedById?: string;
 }) {
-  const { periodStart, periodEnd, drafts } = await computePayoutDrafts(opts);
-  const created: Awaited<ReturnType<typeof prisma.payout.create>>[] = [];
-  for (const d of drafts) {
-    const payout = await prisma.payout.create({
-      data: {
-        storeId: d.storeId,
-        periodStart,
-        periodEnd,
-        grossSales: d.gross,
-        commissionRate: d.commissionRate,
-        commissionAmount: d.commissionAmount,
-        netAmount: d.netAmount,
-        status: "PENDING",
-        orderIds: d.orderIds,
-        bankSnapshot: d.account,
-        markedById: opts?.markedById,
-      },
-    });
-    created.push(payout);
-  }
-  return { periodStart, periodEnd, payouts: created };
+  // Serialise concurrent settlement runs (double-click / two admins) with a
+  // transaction-scoped advisory lock. Without it, two runs each compute drafts
+  // before either commits and both create a payout for the same orders → a store
+  // is paid twice. The lock makes the second run recompute AFTER the first commits,
+  // so it sees the new payouts and skips those orders.
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('store-payout-settlement'))`;
+    const { periodStart, periodEnd, drafts } = await computePayoutDrafts(opts);
+    const created: Awaited<ReturnType<typeof prisma.payout.create>>[] = [];
+    for (const d of drafts) {
+      const payout = await tx.payout.create({
+        data: {
+          storeId: d.storeId,
+          periodStart,
+          periodEnd,
+          grossSales: d.gross,
+          commissionRate: d.commissionRate,
+          commissionAmount: d.commissionAmount,
+          netAmount: d.netAmount,
+          status: "PENDING",
+          orderIds: d.orderIds,
+          bankSnapshot: d.account,
+          markedById: opts?.markedById,
+        },
+      });
+      created.push(payout);
+    }
+    return { periodStart, periodEnd, payouts: created };
+  });
 }
 
 /** Read-only: what "Pay all stores" would do right now (for the confirmation summary). */

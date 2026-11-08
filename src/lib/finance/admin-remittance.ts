@@ -246,12 +246,21 @@ async function reviewOrConfirm(
       throw new RemittanceError("WRONG_METHOD", "A cash handover must be confirmed by a supervisor, not approved as a digital proof.");
     }
 
+    // Lock the parent remittance so two concurrent reviews serialise — otherwise both
+    // could read amountRemitted=0 and over-credit the rider (mirrors markRemittanceReceived).
+    await tx.$queryRaw`SELECT id FROM "CashRemittance" WHERE id = ${sub.remittance.id} FOR UPDATE`;
+    const freshRemit = await tx.cashRemittance.findUnique({
+      where: { id: sub.remittance.id },
+      select: { amountDue: true, amountRemitted: true },
+    });
+
     let amount = toNumber(sub.amount);
     if (decision === "REJECT") {
-      await tx.remittanceSubmission.update({
-        where: { id: submissionId },
+      const rejected = await tx.remittanceSubmission.updateMany({
+        where: { id: submissionId, status: "PENDING_REVIEW" },
         data: { status: "REJECTED", reviewedById: adminId, reviewedAt: new Date(), rejectionReason: (opts.reason || "Not verified").slice(0, 300) },
       });
+      if (rejected.count !== 1) throw new RemittanceError("DONE", "This submission was already reviewed.");
     } else {
       // Supervisor confirms the cash ACTUALLY received; never more than what is still
       // owed. For a handover the amount is required — a blank/0 field must not silently
@@ -262,12 +271,13 @@ async function reviewOrConfirm(
         }
         amount = r2(opts.confirmedAmount);
       }
-      const left = outstanding(toNumber(sub.remittance.amountDue), toNumber(sub.remittance.amountRemitted));
+      const left = outstanding(toNumber(freshRemit?.amountDue ?? sub.remittance.amountDue), toNumber(freshRemit?.amountRemitted ?? sub.remittance.amountRemitted));
       if (amount > left + 0.01) throw new RemittanceError("TOO_MUCH", `Only Rs ${left} is still owed.`);
-      await tx.remittanceSubmission.update({
-        where: { id: submissionId },
+      const approved = await tx.remittanceSubmission.updateMany({
+        where: { id: submissionId, status: "PENDING_REVIEW" },
         data: { status: "APPROVED", amount, reviewedById: adminId, reviewedAt: new Date() },
       });
+      if (approved.count !== 1) throw new RemittanceError("DONE", "This submission was already reviewed.");
     }
 
     const wasRestricted = sub.remittance.riderId

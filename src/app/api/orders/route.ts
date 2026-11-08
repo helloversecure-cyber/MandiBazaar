@@ -236,7 +236,26 @@ export async function GET(req: NextRequest) {
               : null,
           };
         }
-        if (!isAdmin) return { ...base, ...money };
+        if (session.user.role === "RIDER") {
+          // A rider needs the customer's name/phone/address and their OWN cash
+          // records, but not the customer's email.
+          const { customer, ...rest } = base;
+          return {
+            ...rest,
+            ...money,
+            customer: customer
+              ? { id: customer.id, fullName: customer.fullName, phone: customer.phone }
+              : null,
+          };
+        }
+        if (!isAdmin) {
+          // Customer (their own orders): strip the internal rider↔platform cash
+          // settlement records (amountDue, remittance status/deadline) — not theirs.
+          const { cashRemittance: _cr2, cashCollection: _cc2, ...rest } = base;
+          void _cr2;
+          void _cc2;
+          return { ...rest, ...money };
+        }
         const snap = (o.deliveryAddressSnapshot || {}) as { phone?: string; fullName?: string };
         const display = customerDisplayPhone(o.customer?.phone, snap.phone, isPhone);
         return {

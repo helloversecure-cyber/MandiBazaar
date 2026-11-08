@@ -605,13 +605,23 @@ export async function createCheckoutOrder(input: CheckoutInput) {
     }
     return rawAcceptedBid;
   })();
-  // Re-check the winning rider is STILL eligible — they may have become
-  // COD-restricted, suspended or offline during the acceptance window. Don't
-  // pre-assign an order to an ineligible rider; fall back to the standard fee.
+  // Re-check the winning rider is STILL able to take this order — they may have
+  // become COD-restricted, suspended, deactivated or gone offline during the
+  // acceptance window. We check the rider's status fields DIRECTLY and do NOT use
+  // riderBidEligibility here: its "busy" check counts this very accepted request
+  // (an ASSIGNED, order-less DeliveryRequest) and would drop every valid bid.
   if (acceptedBid) {
-    const { riderBidEligibility } = await import("@/lib/riders/eligibility");
-    const elig = await riderBidEligibility(acceptedBid.riderId);
-    if (!elig.eligible) acceptedBid = null;
+    const r = await prisma.rider.findUnique({
+      where: { id: acceptedBid.riderId },
+      select: { approvalStatus: true, isActive: true, status: true, codRestrictedAt: true },
+    });
+    const stillEligible =
+      !!r &&
+      r.approvalStatus === "APPROVED" &&
+      r.isActive &&
+      !r.codRestrictedAt &&
+      r.status !== "OFFLINE";
+    if (!stillEligible) acceptedBid = null;
   }
   const deliveryFee = acceptedBid ? acceptedBid.fee : delivery.fee;
   const grandTotal = productTotal + deliveryFee;
