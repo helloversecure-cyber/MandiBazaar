@@ -1,0 +1,1267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeliveryRequestStatus {
+  OPEN
+  ASSIGNED
+  EXPIRED
+  NO_BIDS
+  CANCELLED
+}
+
+enum RiderBidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum LedgerEntryType {
+  SALE
+  COMMISSION
+  STORE_EARNING
+  RIDER_EARNING
+  CUSTOMER_PAYMENT
+  REFUND
+  STORE_PAYOUT
+  RIDER_PAYOUT
+  ADJUSTMENT
+}
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  ORDER_MANAGER
+  INVENTORY_MANAGER
+  DELIVERY_MANAGER
+  STORE_OWNER
+  CUSTOMER
+  RIDER
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum OrderStatus {
+  /// Rider bidding stage: order placed, waiting for the customer to accept a rider's bid before payment
+  AWAITING_RIDER
+  PENDING_PAYMENT
+  CONFIRMED
+  PROCESSING
+  PACKED
+  READY_FOR_DISPATCH
+  ASSIGNED_TO_RIDER
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  FAILED
+  RETURNED
+}
+
+enum DeliveryFeePaymentStatus {
+  PENDING
+  /// Small orders: delivery fee collected in cash by the rider (full COD)
+  CASH_ON_DELIVERY
+  INITIATED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum ProductPaymentStatus {
+  PENDING
+  PAID
+  CASH_ON_DELIVERY
+  FAILED
+  REFUNDED
+  PARTIALLY_PAID
+}
+
+enum PaymentMethod {
+  JAZZCASH
+  STRIPE
+  CASH_ON_DELIVERY
+  MIXED
+}
+
+enum PaymentType {
+  DELIVERY_FEE
+  PRODUCT_AMOUNT
+  FULL_PAYMENT
+  REFUND
+}
+
+enum PaymentTxnStatus {
+  PENDING
+  INITIATED
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum InventoryTxnType {
+  STOCK_IN
+  STOCK_OUT
+  RESERVE
+  RELEASE
+  ADJUSTMENT
+  SALE
+  RETURN
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  HIDDEN
+  DELETED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum StoreStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum StoreDocType {
+  CNIC_FRONT
+  CNIC_BACK
+  SHOP_IMAGE
+  ADDRESS_PROOF
+  WAREHOUSE_IMAGE
+  OTHER
+}
+
+enum StoreMemberRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  CANCELLED
+}
+
+enum RemittanceStatus {
+  PENDING
+  SUBMITTED
+  UNDER_VERIFICATION
+  PARTIALLY_REMITTED
+  RECEIVED
+  REJECTED
+  OVERDUE
+  DISPUTED
+}
+
+enum PaymentProofStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum RiderApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String?              @unique
+  phone               String?              @unique
+  passwordHash        String?
+  fullName            String
+  avatarUrl           String?
+  isActive            Boolean              @default(true)
+  emailVerified       DateTime?
+  phoneVerified       DateTime?
+  twoFactorEnabled    Boolean              @default(false)
+  twoFactorSecret     String?
+  failedLoginAttempts Int                  @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  onboardingCompleted Boolean              @default(false)
+  /// Set for accounts created by an admin with a temporary password (riders/staff)
+  mustChangePassword  Boolean              @default(false)
+  /// Firebase Auth uid — Firebase is the source of truth for email/password
+  firebaseUid         String?              @unique
+  roleId              String
+  role                Role                 @relation(fields: [roleId], references: [id])
+  addresses           Address[]
+  carts               Cart[]
+  orders              Order[]
+  reviews             Review[]
+  wishlistItems       WishlistItem[]
+  couponUsages        CouponUsage[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  refundsRequested    Refund[]             @relation("RefundRequestedBy")
+  refundsApproved     Refund[]             @relation("RefundApprovedBy")
+  passwordResets      PasswordResetToken[]
+  sessions            Session[]
+  ownedStores         Store[]              @relation("StoreOwner")
+  storesReviewed      Store[]              @relation("StoreReviewedBy")
+  storeMemberships    StoreMember[]
+  remittancesReceived CashRemittance[]     @relation("RemittanceReceivedBy")
+  remitSubmissionsReviewed RemittanceSubmission[] @relation("RemitSubmissionReviewedBy")
+  payoutsMarked       Payout[]             @relation("PayoutMarkedBy")
+  paymentProofsUploaded PaymentProof[]     @relation("PaymentProofUploadedBy")
+  paymentProofsReviewed PaymentProof[]     @relation("PaymentProofReviewedBy")
+  ridersReviewed      Rider[]              @relation("RiderReviewedBy")
+  riderProfile        Rider?
+  onboardingDraft     OnboardingDraft?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([roleId])
+  @@index([phone])
+  @@index([email])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        RoleName         @unique
+  description String?
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Store {
+  id                    String            @id @default(cuid())
+  name                  String
+  slug                  String            @unique
+  description           String?
+  logoUrl               String?
+  coverUrl              String?
+  status                StoreStatus       @default(PENDING)
+  isVirtual             Boolean           @default(false)
+  phone                 String?
+  email                 String?
+  addressLine           String
+  area                  String?
+  city                  String
+  province              String
+  postalCode            String?
+  latitude              Float?
+  longitude             Float?
+  googleMapsUrl         String?
+  cnicNumber            String?
+  bankAccountTitle      String?
+  bankName              String?
+  bankAccountNumber     String?
+  bankIban              String?
+  jazzCashNumber        String?
+  jazzCashAccountTitle  String?
+  /// Category names the seller wants to sell in (Super Admin reviews on approve)
+  requestedCategories   String[]          @default([])
+  commissionOverride    Decimal?          @db.Decimal(5, 2)
+  rejectionReason       String?
+  suspensionReason      String?
+  approvedAt            DateTime?
+  suspendedAt           DateTime?
+  ownerId               String
+  owner                 User              @relation("StoreOwner", fields: [ownerId], references: [id])
+  reviewedById          String?
+  reviewedBy            User?             @relation("StoreReviewedBy", fields: [reviewedById], references: [id])
+  documents             StoreDocument[]
+  members               StoreMember[]
+  products              Product[]
+  orderItems            OrderItem[]
+  fulfillments          StoreFulfillment[]
+  payouts               Payout[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([city])
+  @@index([slug])
+}
+
+model StoreDocument {
+  id        String       @id @default(cuid())
+  storeId   String
+  store     Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  type      StoreDocType
+  url       String
+  publicId  String?
+  label     String?
+  createdAt DateTime     @default(now())
+
+  @@index([storeId])
+}
+
+model StoreMember {
+  id        String          @id @default(cuid())
+  storeId   String
+  store     Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      StoreMemberRole @default(OWNER)
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([storeId, userId])
+  @@index([userId])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model Product {
+  id                String                  @id @default(cuid())
+  storeId           String
+  store             Store                   @relation(fields: [storeId], references: [id])
+  name              String
+  slug              String
+  sku               String
+  categoryId        String
+  category          Category                @relation(fields: [categoryId], references: [id])
+  description       String?
+  shortDescription  String?
+  price             Decimal                 @db.Decimal(12, 2)
+  salePrice         Decimal?                @db.Decimal(12, 2)
+  costPrice         Decimal?                @db.Decimal(12, 2)
+  unit              String
+  weight            Decimal?                @db.Decimal(10, 3)
+  stockQuantity     Int                     @default(0)
+  reservedStock     Int                     @default(0)
+  soldQuantity      Int                     @default(0)
+  lowStockThreshold Int                     @default(5)
+  isOrganic         Boolean                 @default(false)
+  isFarmProduct     Boolean                 @default(false)
+  freeDelivery      Boolean                 @default(false)
+  isFeatured        Boolean                 @default(false)
+  isBestSeller      Boolean                 @default(false)
+  isNewArrival      Boolean                 @default(false)
+  isSeasonal        Boolean                 @default(false)
+  farmSourceInfo    String?
+  ingredients       String?
+  nutritionInfo     String?
+  tags              String[]                @default([])
+  seoTitle          String?
+  seoDescription    String?
+  /// Urdu name / keywords so Urdu searches match (QA B3, R3)
+  urduName          String?
+  /// Store edits to price/name/photos/category/unit waiting for admin review (QA N9).
+  /// The approved values stay live until an admin approves these.
+  pendingChanges    Json?
+  pendingChangesAt  DateTime?
+  /// Reason shown to the store owner when a product/change is declined or archived
+  moderationNote    String?
+  status            ProductStatus           @default(DRAFT)
+  images            ProductImage[]
+  variants          ProductVariant[]
+  inventoryTxns     InventoryTransaction[]
+  cartItems         CartItem[]
+  wishlistItems     WishlistItem[]
+  reviews           Review[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([storeId, slug])
+  @@unique([storeId, sku])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([isBestSeller])
+  @@index([isNewArrival])
+  @@index([isSeasonal])
+  @@index([name])
+}
+
+model ProductVariant {
+  id            String     @id @default(cuid())
+  productId     String
+  product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name          String
+  sku           String
+  unit          String
+  price         Decimal    @db.Decimal(12, 2)
+  salePrice     Decimal?   @db.Decimal(12, 2)
+  stockQuantity Int        @default(0)
+  reservedStock Int        @default(0)
+  weight        Decimal?   @db.Decimal(10, 3)
+  isActive      Boolean    @default(true)
+  cartItems     CartItem[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([productId, sku])
+  @@index([productId])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String?
+  alt       String?
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model InventoryTransaction {
+  id            String           @id @default(cuid())
+  productId     String
+  product       Product          @relation(fields: [productId], references: [id])
+  variantId     String?
+  type          InventoryTxnType
+  quantity      Int
+  previousStock Int
+  newStock      Int
+  orderId       String?
+  note          String?
+  createdById   String?
+  createdAt     DateTime         @default(now())
+
+  @@index([productId])
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model Cart {
+  id         String     @id @default(cuid())
+  userId     String?
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId  String?
+  items      CartItem[]
+  couponCode String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([userId])
+  @@index([sessionId])
+}
+
+model CartItem {
+  id        String          @id @default(cuid())
+  cartId    String
+  cart      Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity  Int             @default(1)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([cartId, productId, variantId])
+  @@index([productId])
+}
+
+model Address {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label                String   @default("Home")
+  fullName             String
+  phone                String
+  houseBuilding        String
+  street               String?
+  area                 String
+  city                 String
+  province             String
+  postalCode           String?
+  nearbyLandmark       String?
+  deliveryInstructions String?
+  latitude             Float?
+  longitude            Float?
+  isDefault            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Rider {
+  id              String              @id @default(cuid())
+  userId          String?             @unique
+  user            User?               @relation(fields: [userId], references: [id])
+  name            String
+  phone           String              @unique
+  city            String?
+  vehicleType     String              @default("Bike")
+  cnicNumber      String?
+  /** Rider selfie / profile photo */
+  photoUrl        String?
+  /** CNIC / ID card front */
+  cnicUrl         String?
+  /** CNIC / ID card back */
+  cnicBackUrl     String?
+  /** Driving license photo */
+  licenseUrl      String?
+  /** Bike / vehicle photo */
+  bikeUrl         String?
+  /** Bike registration card (RC) photo */
+  bikeCardUrl     String?
+  /** Bank or JazzCash account number for payouts */
+  accountNumber   String?
+  accountTitle    String?
+  bankName        String?
+  jazzCashNumber  String?
+  approvalStatus  RiderApprovalStatus @default(PENDING)
+  approvedAt      DateTime?
+  reviewedById    String?
+  reviewedBy      User?               @relation("RiderReviewedBy", fields: [reviewedById], references: [id])
+  reviewNotes     String?
+  isActive        Boolean             @default(false)
+  status          String              @default("OFFLINE")
+  /// Set when the rider is auto-restricted for an overdue COD remittance.
+  /// They can still log in and remit, but cannot take new delivery assignments.
+  codRestrictedAt      DateTime?
+  codRestrictionReason String?
+  orders          Order[]
+  deliveries      Delivery[]
+  riderPayouts    RiderPayout[]
+  remittances     CashRemittance[]
+  bids            RiderBid[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([approvalStatus])
+  @@index([isActive])
+  @@index([codRestrictedAt])
+}
+
+model Order {
+  id                       String                    @id @default(cuid())
+  orderNumber              String                    @unique
+  customerId               String
+  customer                 User                      @relation(fields: [customerId], references: [id])
+  subtotal                 Decimal                   @db.Decimal(12, 2)
+  discount                 Decimal                   @default(0) @db.Decimal(12, 2)
+  deliveryFee              Decimal                   @db.Decimal(12, 2)
+  deliveryDistanceKm       Decimal?                  @db.Decimal(10, 3)
+  grandTotal               Decimal                   @db.Decimal(12, 2)
+  deliveryFeePaid          Decimal                   @default(0) @db.Decimal(12, 2)
+  productAmountPaid        Decimal                   @default(0) @db.Decimal(12, 2)
+  remainingAmount          Decimal                   @db.Decimal(12, 2)
+  paymentMethod            PaymentMethod
+  deliveryFeePaymentStatus DeliveryFeePaymentStatus  @default(PENDING)
+  productPaymentStatus     ProductPaymentStatus      @default(PENDING)
+  orderStatus              OrderStatus               @default(PENDING_PAYMENT)
+  couponCode               String?
+  couponDiscount           Decimal                   @default(0) @db.Decimal(12, 2)
+  notes                    String?
+  estimatedDeliveryAt      DateTime?
+  deliveredAt              DateTime?
+  cancelledAt              DateTime?
+  cancelReason             String?
+  riderId                  String?
+  rider                    Rider?                    @relation(fields: [riderId], references: [id])
+  idempotencyKey           String?                   @unique
+  deliveryAddressSnapshot  Json
+  items                    OrderItem[]
+  fulfillments             StoreFulfillment[]
+  payments                 Payment[]
+  paymentTransactions      PaymentTransaction[]
+  delivery                 Delivery?
+  refunds                  Refund[]
+  notifications            Notification[]
+  cashCollection           CashCollection?
+  cashRemittance           CashRemittance?
+  paymentProofs            PaymentProof[]
+  deliveryRequest          DeliveryRequest?
+  statusEvents             OrderStatusEvent[]
+  confirmationTokens       DeliveryConfirmationToken[]
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  @@index([customerId])
+  @@index([orderStatus])
+  @@index([riderId])
+  @@index([createdAt])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id])
+  storeName       String
+  productId       String?
+  productName     String
+  sku             String
+  variantId       String?
+  variantName     String?
+  unit            String
+  quantity        Int
+  unitPrice       Decimal  @db.Decimal(12, 2)
+  discount        Decimal  @default(0) @db.Decimal(12, 2)
+  finalPrice      Decimal  @db.Decimal(12, 2)
+  imageUrl        String?
+  createdAt       DateTime @default(now())
+
+  @@index([orderId])
+  @@index([storeId])
+  @@index([productId])
+}
+
+model StoreFulfillment {
+  id             String      @id @default(cuid())
+  orderId        String
+  order          Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storeId        String
+  store          Store       @relation(fields: [storeId], references: [id])
+  status         OrderStatus @default(CONFIRMED)
+  subtotal       Decimal     @db.Decimal(12, 2)
+  itemCount      Int
+  pickupAddress  Json
+  readyAt        DateTime?
+  pickedUpAt     DateTime?
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([orderId, storeId])
+  @@index([storeId])
+  @@index([status])
+}
+
+model Payment {
+  id            String               @id @default(cuid())
+  orderId       String
+  order         Order                @relation(fields: [orderId], references: [id])
+  type          PaymentType
+  method        PaymentMethod
+  amount        Decimal              @db.Decimal(12, 2)
+  status        PaymentTxnStatus     @default(PENDING)
+  currency      String               @default("PKR")
+  reference     String?              @unique
+  providerTxnId String?
+  metadata      Json?
+  paidAt        DateTime?
+  transactions  PaymentTransaction[]
+  refunds       Refund[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@index([reference])
+}
+
+model PaymentTransaction {
+  id              String           @id @default(cuid())
+  paymentId       String
+  payment         Payment          @relation(fields: [paymentId], references: [id])
+  orderId         String
+  order           Order            @relation(fields: [orderId], references: [id])
+  provider        String           @default("JAZZCASH")
+  txnRefNo        String           @unique
+  amount          Decimal          @db.Decimal(12, 2)
+  status          PaymentTxnStatus @default(PENDING)
+  requestPayload  Json?
+  responsePayload Json?
+  secureHash      String?
+  idempotencyKey  String           @unique
+  verifiedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([paymentId])
+  @@index([orderId])
+  @@index([status])
+}
+
+model CashCollection {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  order           Order    @relation(fields: [orderId], references: [id])
+  amountCollected Decimal  @db.Decimal(12, 2)
+  collectedAt     DateTime @default(now())
+  riderId         String?
+  paymentMethod   String   @default("CASH")
+  notes           String?
+  collectedById   String?
+  createdAt       DateTime @default(now())
+}
+
+model CashRemittance {
+  id              String           @id @default(cuid())
+  orderId         String           @unique
+  order           Order            @relation(fields: [orderId], references: [id])
+  riderId         String?
+  rider           Rider?           @relation(fields: [riderId], references: [id])
+  /// Total cash the rider collected from the customer for this order.
+  amount          Decimal          @db.Decimal(12, 2)
+  /// Amount the rider must remit to MandiBazaar = collected − retained delivery fee.
+  amountDue       Decimal          @default(0) @db.Decimal(12, 2)
+  /// Verified amount remitted so far (supports partial remittance).
+  amountRemitted  Decimal          @default(0) @db.Decimal(12, 2)
+  status          RemittanceStatus @default(PENDING)
+  /// When the cash was collected (deadline anchor).
+  collectedAt     DateTime?
+  /// Backend 48h deadline (collectedAt + settings.remittanceDeadlineHours).
+  dueAt           DateTime?
+  submittedAt     DateTime?
+  receivedById    String?
+  receivedBy      User?            @relation("RemittanceReceivedBy", fields: [receivedById], references: [id])
+  receivedAt      DateTime?
+  notes           String?
+  submissions     RemittanceSubmission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status])
+  @@index([riderId])
+  @@index([dueAt])
+}
+
+enum RemittanceMethod {
+  CASH_HANDOVER
+  BANK
+  JAZZCASH
+}
+
+enum RemittanceSubmissionStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// One remittance payment attempt (digital proof or physical cash handover).
+/// Partial remittance = several APPROVED submissions summing toward amountDue.
+model RemittanceSubmission {
+  id                String                     @id @default(cuid())
+  remittanceId      String
+  remittance        CashRemittance             @relation(fields: [remittanceId], references: [id], onDelete: Cascade)
+  riderId           String?
+  method            RemittanceMethod
+  amount            Decimal                    @db.Decimal(12, 2)
+  /// Screenshot/proof for a digital transfer (null for cash handover).
+  proofUrl          String?
+  /// Bank/JazzCash transaction id or the generated cash-handover reference.
+  reference         String?                    @unique
+  status            RemittanceSubmissionStatus @default(PENDING_REVIEW)
+  /// Super Admin / authorized supervisor who verified (or rejected) it.
+  reviewedById      String?
+  reviewedBy        User?                      @relation("RemitSubmissionReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@index([remittanceId])
+  @@index([riderId])
+  @@index([status])
+}
+
+/** Rider uploads customer's online payment screenshot for Super Admin review */
+model PaymentProof {
+  id              String             @id @default(cuid())
+  orderId         String
+  order           Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  riderId         String?
+  imageUrl        String
+  notes           String?
+  status          PaymentProofStatus @default(PENDING_REVIEW)
+  uploadedById    String?
+  uploadedBy      User?              @relation("PaymentProofUploadedBy", fields: [uploadedById], references: [id])
+  reviewedById    String?
+  reviewedBy      User?              @relation("PaymentProofReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@index([riderId])
+}
+
+model Payout {
+  id              String       @id @default(cuid())
+  storeId         String
+  store           Store        @relation(fields: [storeId], references: [id])
+  periodStart     DateTime
+  periodEnd       DateTime
+  grossSales      Decimal      @db.Decimal(12, 2)
+  commissionRate  Decimal      @db.Decimal(5, 2)
+  commissionAmount Decimal     @db.Decimal(12, 2)
+  netAmount       Decimal      @db.Decimal(12, 2)
+  status          PayoutStatus @default(PENDING)
+  payoutMethod    String?
+  payoutReference String?
+  bankSnapshot    Json?
+  notes           String?
+  paidAt          DateTime?
+  markedById      String?
+  markedBy        User?        @relation("PayoutMarkedBy", fields: [markedById], references: [id])
+  orderIds        String[]     @default([])
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([storeId])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+}
+
+model Delivery {
+  id            String    @id @default(cuid())
+  orderId       String    @unique
+  order         Order     @relation(fields: [orderId], references: [id])
+  riderId       String?
+  rider         Rider?    @relation(fields: [riderId], references: [id])
+  assignedAt    DateTime?
+  pickedUpAt    DateTime?
+  deliveredAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
+  notes         String?
+  /// Rider pay for this delivery, fixed when the order is delivered
+  riderFee      Decimal?     @db.Decimal(12, 2)
+  riderPayoutId String?
+  riderPayout   RiderPayout? @relation(fields: [riderPayoutId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([riderPayoutId])
+}
+
+/// Money paid by the platform to a rider for a batch of delivered orders
+model RiderPayout {
+  id             String     @id @default(cuid())
+  riderId        String
+  rider          Rider      @relation(fields: [riderId], references: [id])
+  amount         Decimal    @db.Decimal(12, 2)
+  deliveryCount  Int
+  method         String?
+  reference      String?
+  notes          String?
+  paidById       String?
+  paidAt         DateTime   @default(now())
+  deliveries     Delivery[]
+  createdAt      DateTime   @default(now())
+
+  @@index([riderId])
+}
+
+/// One-time codes sent by SMS/email (signup phone verification, admin 2-step sign-in, phone change)
+model OtpCode {
+  id          String    @id @default(cuid())
+  purpose     String
+  /// Normalised phone (03XXXXXXXXX) or lower-case email the code was sent to
+  target      String
+  userId      String?
+  codeHash    String
+  attempts    Int       @default(0)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([purpose, target])
+  @@index([userId])
+}
+
+model Coupon {
+  id                 String        @id @default(cuid())
+  code               String        @unique
+  type               CouponType
+  value              Decimal       @db.Decimal(12, 2)
+  minimumOrderAmount Decimal?      @db.Decimal(12, 2)
+  maximumDiscount    Decimal?      @db.Decimal(12, 2)
+  startDate          DateTime
+  expiryDate         DateTime
+  usageLimit         Int?
+  perUserLimit       Int?          @default(1)
+  /// Only customers with no previous (non-cancelled) order may use it (QA T4)
+  firstOrderOnly     Boolean       @default(false)
+  usedCount          Int           @default(0)
+  isActive           Boolean       @default(true)
+  usages             CouponUsage[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model CouponUsage {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  orderId   String?
+  discount  Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  @@index([couponId, userId])
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id])
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  orderId   String?
+  rating    Int
+  comment   String?
+  imageUrl  String?
+  status    ReviewStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([productId, userId, orderId])
+  @@index([productId])
+  @@index([status])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String?
+  user      User?               @relation(fields: [userId], references: [id])
+  orderId   String?
+  order     Order?              @relation(fields: [orderId], references: [id])
+  channel   NotificationChannel
+  type      String
+  title     String
+  body      String
+  status    NotificationStatus  @default(PENDING)
+  metadata  Json?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId])
+  @@index([orderId])
+}
+
+model Refund {
+  id            String       @id @default(cuid())
+  orderId       String
+  order         Order        @relation(fields: [orderId], references: [id])
+  paymentId     String?
+  payment       Payment?     @relation(fields: [paymentId], references: [id])
+  amount        Decimal      @db.Decimal(12, 2)
+  reason        String
+  status        RefundStatus @default(PENDING)
+  requestedById String?
+  requestedBy   User?        @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+  approvedById  String?
+  approvedBy    User?        @relation("RefundApprovedBy", fields: [approvedById], references: [id])
+  processedAt   DateTime?
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  action        String
+  entity        String
+  entityId      String?
+  previousValue Json?
+  newValue      Json?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// Homepage hero carousel slides (managed by Super Admin)
+model HeroSlide {
+  id        String   @id @default(cuid())
+  imageUrl  String
+  tag       String   @default("")
+  title     String
+  sub       String   @default("")
+  cta       String   @default("Shop now")
+  href      String   @default("/products")
+  accent    String   @default("from-brand-600 via-emerald-600 to-teal-500")
+  stat      String   @default("")
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+/// Platform-wide settings (MandiBazaar / Super Admin)
+model StoreSettings {
+  id                     String   @id @default(cuid())
+  businessName           String   @default("MandiBazaar")
+  logoUrl                String?
+  phone                  String?
+  email                  String?
+  address                String?
+  currency               String   @default("PKR")
+  deliveryRatePerKm      Decimal  @default(10) @db.Decimal(12, 2)
+  defaultDeliveryFee     Decimal  @default(100) @db.Decimal(12, 2)
+  freeDeliveryThreshold  Decimal? @db.Decimal(12, 2)
+  minimumOrderAmount     Decimal  @default(0) @db.Decimal(12, 2)
+  platformCommissionPct  Decimal  @default(5) @db.Decimal(5, 2)
+  /// Cap for distance-based delivery fee (QA U5); null = no cap
+  maxDeliveryFee         Decimal? @db.Decimal(12, 2)
+  cityDeliveryFees       Json?
+  areaDeliveryFees       Json?
+  taxEnabled             Boolean  @default(false)
+  taxRate                Decimal? @db.Decimal(5, 2)
+  jazzCashMerchantId     String?
+  jazzCashPassword       String?
+  jazzCashIntegritySalt  String?
+  jazzCashReturnUrl      String?
+  jazzCashSandbox        Boolean  @default(true)
+  notificationSettings   Json?
+  socialLinks            Json?
+  orderSettings          Json?
+  /// Full cash on delivery (products + delivery fee) allowed when products total <= this. 0 = off.
+  fullCodMaxOrderAmount  Decimal  @default(2000) @db.Decimal(12, 2)
+  /// Rider pay per delivered order = riderBaseFee + riderPerKmFee × distance (km)
+  riderBaseFee           Decimal  @default(50) @db.Decimal(12, 2)
+  riderPerKmFee          Decimal  @default(0) @db.Decimal(12, 2)
+  /// Rider bidding: how long a delivery request stays open for bids (seconds)
+  bidWindowSecs          Int      @default(180)
+  /// How long the customer delivery-confirmation link stays valid (hours)
+  deliveryConfirmWindowHours Int  @default(24)
+  /// COD: hours a rider has to remit collected cash before being auto-restricted.
+  remittanceDeadlineHours    Int  @default(48)
+  /// Remittance methods offered to riders (controlled by Super Admin). JSON array
+  /// of "CASH_HANDOVER" | "BANK" | "JAZZCASH"; null = all enabled.
+  remittanceMethods          Json?
+  /// Where riders hand cash over (supervisor name / location), shown on the handover screen.
+  cashHandoverInstructions   String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model RecentSearch {
+  id        String   @id @default(cuid())
+  userId    String?
+  sessionId String?
+  query     String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+/// InDrive-style delivery auction. Opened for a customer's cart at checkout; riders bid;
+/// the customer accepts one before paying. Linked to the Order once it is placed.
+model DeliveryRequest {
+  id              String                @id @default(cuid())
+  customerId      String
+  orderId         String?               @unique
+  order           Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  status          DeliveryRequestStatus @default(OPEN)
+  expiresAt       DateTime
+  /// Snapshot shown to bidding riders: pickup/drop area, distance, item count, order value.
+  summary         Json?
+  acceptedBidId   String?
+  acceptedRiderId String?
+  acceptedFee     Decimal?              @db.Decimal(12, 2)
+  bids            RiderBid[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+/// A rider's delivery-fee bid on a DeliveryRequest. One active bid per rider per request.
+model RiderBid {
+  id                String          @id @default(cuid())
+  deliveryRequestId String
+  deliveryRequest   DeliveryRequest @relation(fields: [deliveryRequestId], references: [id], onDelete: Cascade)
+  riderId           String
+  rider             Rider           @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  amount            Decimal         @db.Decimal(12, 2)
+  status            RiderBidStatus  @default(PENDING)
+  note              String?
+  expiresAt         DateTime
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([deliveryRequestId, riderId])
+  @@index([riderId])
+  @@index([status])
+}
+
+/// Server-side, resumable onboarding progress. DB is the source of truth (survives refresh / device switch).
+model OnboardingDraft {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        RoleName
+  currentStep Int       @default(0)
+  data        Json      @default("{}")
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+/// Append-only journal of every order status transition (who/when/why).
+model OrderStatusEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  actorId   String?
+  actorRole String?
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+/// Single-use, hashed token for the customer "Did you receive your order?" email link.
+model DeliveryConfirmationToken {
+  id        String    @id @default(cuid())
+  orderId   String
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  outcome   String?
+  createdAt DateTime  @default(now())
+
+  @@index([orderId])
+}
+
+/// Append-only financial ledger. Never updated/deleted in app code; corrections are new reversing rows.
+model LedgerEntry {
+  id        String          @id @default(cuid())
+  type      LedgerEntryType
+  orderId   String?
+  storeId   String?
+  riderId   String?
+  /// Signed amount: positive = owed to / earned by the party; negative = deduction / paid out.
+  amount    Decimal         @db.Decimal(12, 2)
+  refType   String?
+  refId     String?
+  meta      Json?
+  createdAt DateTime        @default(now())
+
+  @@index([orderId])
+  @@index([storeId])
+  @@index([riderId])
+  @@index([type])
+}

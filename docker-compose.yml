@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zulaal-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zulaal
+      POSTGRES_PASSWORD: zulaal
+      POSTGRES_DB: zulaal
+    ports:
+      - "5432:5432"
+    volumes:
+      - zulaal_pg_data:/var/lib/postgresql/data
+
+volumes:
+  zulaal_pg_data:

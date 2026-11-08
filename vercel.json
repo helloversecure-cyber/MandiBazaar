@@ -1,0 +1,22 @@
+{
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "private, no-store, no-cache, max-age=0, must-revalidate" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/expire-pending-payments",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/remittance-sweep",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

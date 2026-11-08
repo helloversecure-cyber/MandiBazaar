@@ -1,0 +1,329 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --brand: #059669;
+  --accent: #f97316;
+
+  /* Semantic tokens (rgb channels for Tailwind <alpha-value> support) — LIGHT */
+  --c-app: 248 250 252; /* slate-50  */
+  --c-card: 255 255 255; /* white     */
+  --c-elevated: 255 255 255;
+  --c-line: 226 232 240; /* slate-200 */
+  --c-ink: 15 23 42; /* slate-900 */
+  --c-ink-muted: 71 85 105; /* slate-600 */
+  --c-ink-subtle: 100 116 139; /* slate-500 */
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #e2e8f0;
+
+  /* Semantic tokens — DARK */
+  --c-app: 2 6 23; /* slate-950 */
+  --c-card: 15 23 42; /* slate-900 */
+  --c-elevated: 30 41 59; /* slate-800 */
+  --c-line: 30 41 59; /* slate-800 */
+  --c-ink: 241 245 249; /* slate-100 */
+  --c-ink-muted: 148 163 184; /* slate-400 */
+  --c-ink-subtle: 100 116 139; /* slate-500 */
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  min-height: 100vh;
+}
+
+/* Smooth the flip between themes (not on page load — only on toggle). */
+.theme-ready * {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Dark-aware shimmer so loaders don't flash white on dark pages. */
+.dark .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out forwards;
+}
+
+@keyframes ken-burns {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+
+.animate-ken-burns {
+  animation: ken-burns 8s ease-out forwards;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+@keyframes shine {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-15deg);
+  }
+}
+
+.shine-hover {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.25),
+    transparent
+  );
+  transform: translateX(-100%) skewX(-15deg);
+  transition: none;
+}
+
+.shine-hover:hover::after {
+  animation: shine 0.7s ease-out;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Brand wordmark — soft green shimmer */
+.animate-brand-name {
+  background-image: linear-gradient(
+    105deg,
+    #047857 0%,
+    #10b981 35%,
+    #34d399 50%,
+    #10b981 65%,
+    #047857 100%
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: brand-name-shine 4s ease-in-out infinite;
+}
+
+@keyframes brand-name-shine {
+  0%,
+  100% {
+    background-position: 0% center;
+  }
+  50% {
+    background-position: 100% center;
+  }
+}
+
+.animate-brand-name-on-dark {
+  background-image: linear-gradient(
+    105deg,
+    #6ee7b7 0%,
+    #a7f3d0 35%,
+    #ffffff 50%,
+    #a7f3d0 65%,
+    #6ee7b7 100%
+  );
+}
+
+@keyframes brand-tagline-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+
+.card-shine {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+/* ── Redesign polish layer ──────────────────────────────────────────────── */
+
+/* Smooth lift + shadow on interactive cards */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease;
+  will-change: transform;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 34px -12px rgba(5, 150, 105, 0.28);
+}
+
+/* Press feedback for any tappable element */
+.press {
+  transition: transform 0.12s ease;
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+/* Reveal-on-mount with graceful stagger for children (cards, rows, tiles). */
+.reveal > * {
+  opacity: 0;
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.reveal > *:nth-child(1) { animation-delay: 0.02s; }
+.reveal > *:nth-child(2) { animation-delay: 0.07s; }
+.reveal > *:nth-child(3) { animation-delay: 0.12s; }
+.reveal > *:nth-child(4) { animation-delay: 0.17s; }
+.reveal > *:nth-child(5) { animation-delay: 0.22s; }
+.reveal > *:nth-child(6) { animation-delay: 0.27s; }
+.reveal > *:nth-child(7) { animation-delay: 0.32s; }
+.reveal > *:nth-child(8) { animation-delay: 0.37s; }
+.reveal > *:nth-child(n + 9) { animation-delay: 0.42s; }
+
+/* Gentle fade+scale for panels/dialogs */
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-pop-in {
+  animation: pop-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Animated count-up numbers get a soft fade so value changes aren't jarring */
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Immersive hero: morphing blobs, floating chips, mesh drift ─────────── */
+@keyframes blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(24px, -28px) scale(1.12); }
+  66% { transform: translate(-20px, 18px) scale(0.92); }
+}
+.animate-blob { animation: blob 14s ease-in-out infinite; }
+.animate-blob-2 { animation: blob 18s ease-in-out infinite reverse; }
+.animate-blob-3 { animation: blob 22s ease-in-out infinite; }
+
+@keyframes float-chip {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float-chip { animation: float-chip 5s ease-in-out infinite; }
+.animate-float-chip-2 { animation: float-chip 6.5s ease-in-out infinite; }
+
+@keyframes mesh-drift {
+  0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+  50% { background-position: 20% 30%, 80% 20%, 40% 80%; }
+}
+.animate-mesh { animation: mesh-drift 18s ease-in-out infinite; }
+
+/* Respect users who prefer less motion — disable all the above + existing loops. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal > * {
+    opacity: 1;
+  }
+}
