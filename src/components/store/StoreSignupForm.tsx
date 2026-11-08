@@ -66,6 +66,26 @@ const FIELD_ORDER = [
 
 const textareaBase = "w-full rounded-xl border bg-app px-4 py-3 text-sm outline-none focus:bg-card focus:ring-2";
 
+/** Shown as pickable suggestions when MandiBazaar has no active categories yet. */
+const DEFAULT_CATEGORY_SUGGESTIONS = [
+  "Vegetables",
+  "Fruits",
+  "Dairy & Eggs",
+  "Meat & Poultry",
+  "Rice & Grains",
+  "Daal & Pulses",
+  "Atta & Flour",
+  "Spices & Masala",
+  "Cooking Oil & Ghee",
+  "Dry Fruits & Nuts",
+  "Honey",
+  "Bakery",
+  "Beverages",
+  "Snacks",
+  "Household",
+  "Personal Care",
+];
+
 export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => void }) {
   const { data: session, update: updateSession } = useSession();
   const [loading, setLoading] = useState(false);
@@ -76,7 +96,9 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
   const [platformCategories, setPlatformCategories] = useState<PlatformCategory[]>([]);
   const [selectedCategoryNames, setSelectedCategoryNames] = useState<string[]>([]);
   const [useOtherCategory, setUseOtherCategory] = useState(false);
-  const [otherCategoryName, setOtherCategoryName] = useState("");
+  // Custom categories as removable tags (type a name + Enter / comma → a chip).
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [customInput, setCustomInput] = useState("");
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -106,11 +128,33 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
     clearError("requestedCategories");
   }
 
+  /** Add a typed custom category as a tag (dedupes against picks + existing tags). */
+  function addCustomCategory(raw: string) {
+    const name = raw.trim().replace(/\s+/g, " ");
+    if (name.length < 2) return;
+    const taken = new Set(
+      [...selectedCategoryNames, ...customCategories].map((n) => n.toLowerCase())
+    );
+    if (taken.has(name.toLowerCase())) {
+      setCustomInput("");
+      return;
+    }
+    setCustomCategories((prev) => (prev.length >= 20 ? prev : [...prev, name.slice(0, 40)]));
+    setCustomInput("");
+    clearError("otherCategoryName", "requestedCategories");
+  }
+
+  function removeCustomCategory(name: string) {
+    setCustomCategories((prev) => prev.filter((n) => n !== name));
+  }
+
   function buildRequestedCategories(): string[] {
     const names = [...selectedCategoryNames];
     if (useOtherCategory) {
-      const custom = otherCategoryName.trim().replace(/\s+/g, " ");
-      if (custom.length >= 2) names.push(custom);
+      names.push(...customCategories);
+      // Include a half-typed name the user didn't press Enter on, so it isn't lost.
+      const pending = customInput.trim().replace(/\s+/g, " ");
+      if (pending.length >= 2) names.push(pending);
     }
     const seen = new Set<string>();
     const out: string[] = [];
@@ -227,11 +271,11 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
     }
     const v = validateStoreSignup({ ...form, isVirtual, requestedCategories }, { server: false });
     if (!v.success) Object.assign(fe, v.errors);
-    if (useOtherCategory) {
-      const c = zCategoryName.safeParse(otherCategoryName);
-      if (!c.success) fe.otherCategoryName = c.error.issues[0]?.message || "Enter a category name";
+    // Added tags were validated at add-time; only re-check a half-typed pending name.
+    if (useOtherCategory && customInput.trim()) {
+      const c = zCategoryName.safeParse(customInput.trim().replace(/\s+/g, " "));
+      if (!c.success) fe.otherCategoryName = c.error.issues[0]?.message || "Enter a valid category name";
     }
-    if (fe.requestedCategories && useOtherCategory && fe.otherCategoryName) delete fe.requestedCategories;
     Object.assign(fe, missingStoreDocErrors(docs, isVirtual));
     return fe;
   }
@@ -585,33 +629,42 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
           </p>
         </div>
 
-        {platformCategories.length > 0 ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {platformCategories.map((c) => {
-              const checked = selectedCategoryNames.includes(c.name);
-              return (
-                <label
-                  key={c.id}
-                  className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-                    checked ? "border-brand-300 bg-brand-50 text-brand-900" : "border-line bg-app text-ink"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleCategory(c.name)}
-                    className="rounded border-slate-300"
-                  />
-                  <span className="font-medium">{c.name}</span>
-                </label>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-ink-subtle">
-            No platform categories yet — use Others below, or ask MandiBazaar to add categories first.
-          </p>
-        )}
+        {(() => {
+          const usingSuggestions = platformCategories.length === 0;
+          const options = usingSuggestions
+            ? DEFAULT_CATEGORY_SUGGESTIONS.map((name, i) => ({ id: `suggest-${i}`, name }))
+            : platformCategories;
+          return (
+            <>
+              {usingSuggestions && (
+                <p className="text-xs text-ink-subtle">
+                  Suggested categories — pick any that fit. MandiBazaar confirms them when approving your store.
+                </p>
+              )}
+              <div className="grid gap-2 sm:grid-cols-2">
+                {options.map((c) => {
+                  const checked = selectedCategoryNames.includes(c.name);
+                  return (
+                    <label
+                      key={c.id}
+                      className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                        checked ? "border-brand-300 bg-brand-50 text-brand-900" : "border-line bg-app text-ink"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCategory(c.name)}
+                        className="rounded border-slate-300"
+                      />
+                      <span className="font-medium">{c.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
 
         <label
           className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
@@ -623,28 +676,65 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
             checked={useOtherCategory}
             onChange={(e) => {
               setUseOtherCategory(e.target.checked);
-              if (!e.target.checked) setOtherCategoryName("");
+              if (!e.target.checked) {
+                setCustomCategories([]);
+                setCustomInput("");
+              }
               clearError("requestedCategories", "otherCategoryName");
             }}
             className="rounded border-slate-300"
           />
-          <span className="font-medium">Others (custom category)</span>
+          <span className="font-medium">Add your own category</span>
         </label>
 
         {useOtherCategory && (
-          <TextField
-            name="otherCategoryName"
-            label="Custom category name"
-            required
-            placeholder="e.g. Dry Fruits"
-            maxLength={40}
-            value={otherCategoryName}
-            onChange={(e) => {
-              setOtherCategoryName(e.target.value);
-              clearError("otherCategoryName", "requestedCategories");
-            }}
-            error={errors.otherCategoryName}
-          />
+          <div data-field="otherCategoryName">
+            <FieldLabel htmlFor="f-custom-cat">Your categories</FieldLabel>
+            {customCategories.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {customCategories.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-sm font-medium text-brand-800"
+                  >
+                    {name}
+                    <button
+                      type="button"
+                      onClick={() => removeCustomCategory(name)}
+                      className="ml-0.5 text-base leading-none text-brand-500 hover:text-brand-800"
+                      aria-label={`Remove ${name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              id="f-custom-cat"
+              type="text"
+              placeholder="Type a category and press Enter (e.g. Dry Fruits)"
+              maxLength={40}
+              value={customInput}
+              onChange={(e) => {
+                setCustomInput(e.target.value);
+                clearError("otherCategoryName", "requestedCategories");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addCustomCategory(customInput);
+                }
+              }}
+              className={`w-full rounded-xl border bg-app px-4 py-3 text-sm outline-none focus:bg-card focus:ring-2 ${
+                errors.otherCategoryName ? "border-red-300" : "border-line"
+              }`}
+            />
+            <p className="mt-1 text-xs text-ink-subtle">
+              Press Enter (or comma) to add each one. MandiBazaar reviews custom categories on approval.
+            </p>
+            {errors.otherCategoryName && <FieldError message={errors.otherCategoryName} />}
+          </div>
         )}
 
         {errors.requestedCategories ? (
