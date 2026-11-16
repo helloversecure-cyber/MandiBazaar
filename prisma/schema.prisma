@@ -642,6 +642,10 @@ model Order {
   subtotal                 Decimal                   @db.Decimal(12, 2)
   discount                 Decimal                   @default(0) @db.Decimal(12, 2)
   deliveryFee              Decimal                   @db.Decimal(12, 2)
+  // NEW-08: on a store-sponsored free-delivery order the customer is charged Rs 0
+  // delivery, but the rider is still paid this (notional) fee and it is deducted
+  // from the store's payout. 0 for normal / platform-threshold-free orders.
+  sponsoredDeliveryFee     Decimal                   @default(0) @db.Decimal(12, 2)
   deliveryDistanceKm       Decimal?                  @db.Decimal(10, 3)
   grandTotal               Decimal                   @db.Decimal(12, 2)
   deliveryFeePaid          Decimal                   @default(0) @db.Decimal(12, 2)
@@ -893,6 +897,9 @@ model Payout {
   commissionRate  Decimal      @db.Decimal(5, 2)
   commissionAmount Decimal     @db.Decimal(12, 2)
   netAmount       Decimal      @db.Decimal(12, 2)
+  // NEW-08: delivery fees the store sponsored on its free-delivery orders, already
+  // subtracted from netAmount (the store funds the rider on those orders).
+  deliveryFeeDeducted Decimal   @default(0) @db.Decimal(12, 2)
   status          PayoutStatus @default(PENDING)
   payoutMethod    String?
   payoutReference String?

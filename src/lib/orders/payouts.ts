@@ -51,6 +51,8 @@ export type PayoutDraft = {
   gross: number;
   commissionRate: number;
   commissionAmount: number;
+  /** NEW-08: store-sponsored delivery fees, already subtracted from netAmount. */
+  deliveryFeeDeducted: number;
   netAmount: number;
   orderIds: string[];
   account: BankSnapshot;
@@ -95,6 +97,7 @@ export async function computePayoutDrafts(opts?: { periodEnd?: Date }) {
       id: true,
       deliveredAt: true,
       paymentMethod: true,
+      sponsoredDeliveryFee: true,
       cashRemittance: { select: { status: true } },
       items: { select: { storeId: true, finalPrice: true } },
     },
@@ -109,6 +112,9 @@ export async function computePayoutDrafts(opts?: { periodEnd?: Date }) {
   );
 
   const byStore = new Map<string, { gross: number; orderIds: string[] }>();
+  // NEW-08: delivery fees a store sponsored on its free-delivery orders — charged
+  // back to that store (split across its stores by product share for multi-store).
+  const sponsoredByStore = new Map<string, number>();
   // COD orders whose cash is not yet verified-remitted — held, not settled.
   const heldByStore = new Map<string, { gross: number; orderIds: string[] }>();
   let earliest: Date | null = null;
@@ -118,6 +124,8 @@ export async function computePayoutDrafts(opts?: { periodEnd?: Date }) {
     for (const item of order.items) {
       storeTotals.set(item.storeId, (storeTotals.get(item.storeId) || 0) + toNumber(item.finalPrice));
     }
+    const orderGross = Array.from(storeTotals.values()).reduce((s, g) => s + g, 0);
+    const orderSponsored = toNumber(order.sponsoredDeliveryFee);
     for (const [storeId, gross] of Array.from(storeTotals.entries())) {
       if (alreadyPaidForStore.has(`${storeId}:${order.id}`)) continue;
       if (!reconciled) {
@@ -132,6 +140,10 @@ export async function computePayoutDrafts(opts?: { periodEnd?: Date }) {
       acc.gross += gross;
       acc.orderIds.push(order.id);
       byStore.set(storeId, acc);
+      if (orderSponsored > 0 && orderGross > 0) {
+        const share = orderSponsored * (gross / orderGross);
+        sponsoredByStore.set(storeId, (sponsoredByStore.get(storeId) || 0) + share);
+      }
       if (order.deliveredAt && (!earliest || order.deliveredAt < earliest)) earliest = order.deliveredAt;
     }
   }
@@ -151,6 +163,10 @@ export async function computePayoutDrafts(opts?: { periodEnd?: Date }) {
     if (gross <= 0) continue;
     const rate = store.commissionOverride != null ? toNumber(store.commissionOverride) : defaultCommission;
     const { commissionAmount, netAmount } = payoutAmounts(gross, rate);
+    // NEW-08: the store funds the rider on its free-delivery orders — take those
+    // sponsored fees out of the store's net payout.
+    const deliveryFeeDeducted = Math.round((sponsoredByStore.get(store.id) || 0) * 100) / 100;
+    const finalNet = Math.max(0, Math.round((netAmount - deliveryFeeDeducted) * 100) / 100);
     const account: BankSnapshot = {
       bankAccountTitle: store.bankAccountTitle,
       bankName: store.bankName,
@@ -166,7 +182,8 @@ export async function computePayoutDrafts(opts?: { periodEnd?: Date }) {
       gross,
       commissionRate: rate,
       commissionAmount,
-      netAmount,
+      deliveryFeeDeducted,
+      netAmount: finalNet,
       orderIds: Array.from(new Set(acc.orderIds)),
       account,
       method: pick.method,
@@ -219,6 +236,7 @@ export async function generateWeeklyPayouts(opts?: {
           grossSales: d.gross,
           commissionRate: d.commissionRate,
           commissionAmount: d.commissionAmount,
+          deliveryFeeDeducted: d.deliveryFeeDeducted,
           netAmount: d.netAmount,
           status: "PENDING",
           orderIds: d.orderIds,

@@ -13,10 +13,18 @@ export function VerifyEmailNotice({
   email,
   devLink,
   password,
+  /** Where "Go to sign in" goes — defaults to the customer login. Store/rider
+   *  signups pass their own portal login so they don't land on (and sign in to)
+   *  the customer portal by mistake. */
+  loginHref = "/login",
+  /** Where "Start over" goes — defaults to the customer register. */
+  registerHref = "/register",
 }: {
   email: string;
   devLink?: string;
   password?: string;
+  loginHref?: string;
+  registerHref?: string;
 }) {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState("");
@@ -59,7 +67,7 @@ export function VerifyEmailNotice({
       )}
 
       <div className="mt-6 space-y-3">
-        <Button href="/login" className="w-full">
+        <Button href={loginHref} className="w-full">
           Go to sign in
         </Button>
         <button
@@ -75,7 +83,7 @@ export function VerifyEmailNotice({
 
       <p className="mt-6 text-xs text-slate-400">
         Wrong email?{" "}
-        <Link href="/register" className="text-brand-600 underline">
+        <Link href={registerHref} className="text-brand-600 underline">
           Start over
         </Link>
       </p>

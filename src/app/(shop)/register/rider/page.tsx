@@ -127,7 +127,13 @@ export default function RiderRegisterPage() {
   if (done) {
     return (
       <ShopContainer width="md" className="flex min-h-[70vh] flex-col justify-center py-10">
-        <VerifyEmailNotice email={done.email} devLink={done.devLink} password={form.password} />
+        <VerifyEmailNotice
+          email={done.email}
+          devLink={done.devLink}
+          password={form.password}
+          loginHref="/login?portal=rider"
+          registerHref="/register/rider"
+        />
       </ShopContainer>
     );
   }

@@ -173,7 +173,8 @@ export default function OrderDetailPage() {
     const { confirmed } = await confirmDialog({
       title: "Cancel this order?",
       message: "If you paid online, a refund will be started automatically.",
-      confirmLabel: "Cancel order",
+      confirmLabel: "Yes, cancel",
+      cancelLabel: "Keep order",
       tone: "danger",
     });
     if (!confirmed) return;
@@ -461,7 +462,13 @@ export default function OrderDetailPage() {
         <Row label="Discount" value={`-${formatCurrency(order.discount)}`} />
         <Row label="Delivery fee" value={formatCurrency(order.deliveryFee)} />
         <Row
-          label={order.fullCod ? "Delivery fee paid (cash)" : "Delivery fee paid"}
+          label={
+            order.fullCod && (order.deliveryFeePaid || 0) <= 0
+              ? "Delivery fee (pay in cash on delivery)"
+              : order.fullCod
+                ? "Delivery fee paid (cash)"
+                : "Delivery fee paid"
+          }
           value={formatCurrency(order.deliveryFeePaid)}
         />
         <Row label="Product amount paid" value={formatCurrency(order.productAmountPaid)} />
@@ -471,7 +478,16 @@ export default function OrderDetailPage() {
         />
         <Row
           label="Payment"
-          value={order.paymentLabel || String(order.paymentMethod || "").replace(/_/g, " ")}
+          value={
+            order.paymentLabel ||
+            (order.paymentMethod === "MIXED"
+              ? "Online + cash on delivery"
+              : order.paymentMethod === "JAZZCASH_QR"
+                ? "JazzCash QR"
+                : order.paymentMethod === "COD"
+                  ? "Cash on delivery"
+                  : String(order.paymentMethod || "").replace(/_/g, " "))
+          }
         />
       </div>
 

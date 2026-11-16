@@ -130,7 +130,13 @@ export async function GET(
         orderBy: { createdAt: "desc" },
         select: { id: true, status: true, reviewNotes: true, createdAt: true, reviewedAt: true },
       });
-      return apiSuccess({ ...base, paymentProofs: myProofs });
+      // NEW-05: a cancelled/failed order has nothing left to pay or collect — don't
+      // show "Remaining Rs X" / "To collect Rs X" on it.
+      const settled = ["CANCELLED", "FAILED"].includes(order.orderStatus);
+      const customerBase = settled
+        ? { ...base, remainingAmount: 0, cashDue: { products: 0, delivery: 0, total: 0 } }
+        : base;
+      return apiSuccess({ ...customerBase, paymentProofs: myProofs });
     }
 
     // ---- Admin-only detail (QA P2: full order page) ----
@@ -175,6 +181,18 @@ export async function GET(
         })
       : [];
 
+    // M-8: store fulfillment steps (preparing / packed / ready) are logged against
+    // the StoreFulfillment, so pull them in too — otherwise the admin order history
+    // only shows "Order placed" and the rider assignment.
+    const fulfillmentIds = fulfillments.map((f) => f.id);
+    const fulfillmentHistory = fulfillmentIds.length
+      ? await prisma.auditLog.findMany({
+          where: { entity: "StoreFulfillment", entityId: { in: fulfillmentIds } },
+          include: { user: { select: { fullName: true } } },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+
     const timeline = [
       {
         at: order.createdAt,
@@ -182,7 +200,7 @@ export async function GET(
         by: order.customer?.fullName || "Customer",
         detail: null as unknown,
       },
-      ...[...history, ...proofHistory].map((h) => ({
+      ...[...history, ...proofHistory, ...fulfillmentHistory].map((h) => ({
         at: h.createdAt,
         action: h.action,
         by: h.user?.fullName || (h.userId ? "Staff" : "System"),

@@ -720,6 +720,9 @@ export async function createCheckoutOrder(input: CheckoutInput) {
         subtotal,
         discount,
         deliveryFee,
+        // NEW-08: on a store-sponsored free delivery the customer pays Rs 0 but the
+        // store funds the rider's (notional) fee. Bid deliveries are never free.
+        sponsoredDeliveryFee: acceptedBid ? 0 : delivery.sponsoredFee,
         deliveryDistanceKm: delivery.distanceKm || null,
         grandTotal,
         deliveryFeePaid: 0,

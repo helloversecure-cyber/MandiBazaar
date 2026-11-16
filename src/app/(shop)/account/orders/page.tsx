@@ -38,6 +38,8 @@ function OrdersContent() {
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
   const rawFilter = sp.get("status") || "all";
   const filter: CustomerOrderFilter = isCustomerOrderFilter(rawFilter) ? rawFilter : "all";
+  const qParam = (sp.get("q") || "").trim();
+  const [search, setSearch] = useState(qParam);
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -48,6 +50,7 @@ function OrdersContent() {
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ filter, page: String(page), limit: String(PAGE_SIZE) });
+    if (qParam) params.set("q", qParam);
     fetch(`/api/account/orders?${params}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -59,14 +62,26 @@ function OrdersContent() {
         }
       })
       .finally(() => setLoading(false));
-  }, [filter, page]);
+  }, [filter, page, qParam]);
 
   function hrefFor(p: number, f: CustomerOrderFilter = filter) {
     const params = new URLSearchParams();
     if (f !== "all") params.set("status", f);
+    if (qParam) params.set("q", qParam);
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     return `/account/orders${qs ? `?${qs}` : ""}`;
+  }
+
+  // R8: search My orders by order number.
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (filter !== "all") params.set("status", filter);
+    const term = search.trim();
+    if (term) params.set("q", term);
+    const qs = params.toString();
+    router.push(`/account/orders${qs ? `?${qs}` : ""}`);
   }
 
   const allCount = counts.all ?? total;
@@ -74,6 +89,35 @@ function OrdersContent() {
   return (
     <div>
       <PageHeader title="My orders" subtitle={plural(allCount, "order")} badge="Orders" />
+
+      <form onSubmit={submitSearch} className="mb-4 flex gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by order number (e.g. ORD-…)"
+          maxLength={30}
+          className="w-full rounded-xl border border-line bg-card px-3 py-2 text-sm"
+          aria-label="Search orders by number"
+        />
+        <button type="submit" className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+          Search
+        </button>
+        {qParam && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              const p = new URLSearchParams();
+              if (filter !== "all") p.set("status", filter);
+              const qs = p.toString();
+              router.push(`/account/orders${qs ? `?${qs}` : ""}`);
+            }}
+            className="rounded-xl px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink"
+          >
+            Clear
+          </button>
+        )}
+      </form>
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {CUSTOMER_ORDER_FILTERS.map((f) => (

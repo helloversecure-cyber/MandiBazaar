@@ -40,16 +40,15 @@ export function computeRiderFee(settings: RiderPaySettings, distanceKm: number |
   return Math.max(0, Math.round(raw));
 }
 
-function rs(n: number): string {
-  return `Rs ${Number(n).toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
-}
-
-/** One line for riders and admins: "Rs 50 per delivery + Rs 10 per km". */
-export function describeRiderPayRule(s: RiderPaySettings): string {
-  const base = finiteNonNeg(s.baseFee);
-  const perKm = finiteNonNeg(s.perKmFee);
-  if (!perKm) return `${rs(base)} per delivery`;
-  return `${rs(base)} per delivery + ${rs(perKm)} per km`;
+/**
+ * One line for riders and admins. NEW-01: the rider keeps the delivery fee, so
+ * their pay for a delivery is that fee — collected directly in cash, or paid out
+ * by the platform when the customer paid the fee online. There is no separate
+ * per-delivery pay. (Settings args kept for signature compatibility; unused.)
+ */
+export function describeRiderPayRule(settings?: RiderPaySettings): string {
+  void settings;
+  return "The rider keeps the delivery fee (paid out when the fee was paid online)";
 }
 
 /** Stored fee if fixed at delivery, else priced with the current settings. */

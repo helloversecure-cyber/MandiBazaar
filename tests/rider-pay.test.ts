@@ -33,9 +33,10 @@ describe("rider fee formula", () => {
     expect(computeRiderFee({ baseFee: -10, perKmFee: -5 }, 3)).toBe(0);
     expect(computeRiderFee(S, -4)).toBe(50);
   });
-  it("describes the rule in one line", () => {
-    expect(describeRiderPayRule({ baseFee: 50, perKmFee: 0 })).toBe("Rs 50 per delivery");
-    expect(describeRiderPayRule({ baseFee: 50, perKmFee: 10 })).toBe("Rs 50 per delivery + Rs 10 per km");
+  it("describes the rule in one line (rider keeps the delivery fee)", () => {
+    expect(describeRiderPayRule({ baseFee: 50, perKmFee: 0 })).toBe(
+      "The rider keeps the delivery fee (paid out when the fee was paid online)"
+    );
   });
   it("keeps a fixed fee even if settings change", () => {
     expect(effectiveRiderFee({ riderFee: 60, distanceKm: 10 }, { baseFee: 100, perKmFee: 100 })).toBe(60);
@@ -50,7 +51,7 @@ describe("rider fee formula", () => {
 type Del = { orderId: string; riderId: string | null; riderFee: number | null; riderPayoutId: string | null; deliveredAt?: Date };
 
 function fakeTx(opts: {
-  order: { id: string; orderStatus: string; riderId: string | null; deliveryDistanceKm: number | null };
+  order: { id: string; orderStatus: string; riderId: string | null; deliveryDistanceKm: number | null; deliveryFee?: number; deliveryFeePaid?: number; sponsoredDeliveryFee?: number };
   delivery?: Del;
   settings: { riderBaseFee: number; riderPerKmFee: number };
 }) {
@@ -86,24 +87,42 @@ function fakeTx(opts: {
 }
 
 describe("recordRiderFeeForOrder", () => {
-  const order = { id: "o1", orderStatus: "DELIVERED", riderId: "r1", deliveryDistanceKm: 4 };
+  // NEW-01: "the rider keeps the delivery fee." Their payout for a delivery is only
+  // the ONLINE-paid part of the delivery fee (deliveryFeePaid) — Rs 0 for a normal
+  // cash-on-delivery order, because they already kept the cash fee.
+  const order = { id: "o1", orderStatus: "DELIVERED", riderId: "r1", deliveryDistanceKm: 4, deliveryFee: 100, deliveryFeePaid: 0 };
 
-  it("creates the delivery row and fixes the fee", async () => {
+  it("records Rs 0 payout when the rider kept the delivery fee in cash", async () => {
     const { tx, state } = fakeTx({ order, settings: { riderBaseFee: 50, riderPerKmFee: 10 } });
-    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(90);
-    expect(state.delivery).toMatchObject({ orderId: "o1", riderId: "r1", riderFee: 90 });
+    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(0);
+    expect(state.delivery).toMatchObject({ orderId: "o1", riderId: "r1", riderFee: 0 });
   });
 
-  it("is idempotent and never changes a fixed fee after settings change", async () => {
+  it("pays the rider the online-paid delivery fee", async () => {
+    const { tx, state } = fakeTx({ order: { ...order, deliveryFeePaid: 100 }, settings: { riderBaseFee: 50, riderPerKmFee: 10 } });
+    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(100);
+    expect(state.delivery).toMatchObject({ orderId: "o1", riderId: "r1", riderFee: 100 });
+  });
+
+  it("NEW-08: pays the rider the store-sponsored fee on a free-delivery order", async () => {
+    // Customer paid Rs 0 delivery (deliveryFeePaid 0); the store sponsors Rs 150.
     const { tx, state } = fakeTx({
-      order,
+      order: { ...order, deliveryFeePaid: 0, sponsoredDeliveryFee: 150 },
+      settings: { riderBaseFee: 50, riderPerKmFee: 10 },
+    });
+    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(150);
+    expect(state.delivery).toMatchObject({ orderId: "o1", riderId: "r1", riderFee: 150 });
+  });
+
+  it("is idempotent and never changes a fixed fee", async () => {
+    const { tx, state } = fakeTx({
+      order: { ...order, deliveryFeePaid: 100 },
       delivery: { orderId: "o1", riderId: "r1", riderFee: null, riderPayoutId: null },
       settings: { riderBaseFee: 50, riderPerKmFee: 10 },
     });
-    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(90);
-    state.settings.riderBaseFee = 500;
-    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(90);
-    expect(state.delivery!.riderFee).toBe(90);
+    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(100);
+    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(100);
+    expect(state.delivery!.riderFee).toBe(100);
   });
 
   it("does nothing for non-delivered orders or orders without a rider", async () => {
@@ -113,11 +132,6 @@ describe("recordRiderFeeForOrder", () => {
     const b = fakeTx({ order: { ...order, riderId: null }, settings: { riderBaseFee: 50, riderPerKmFee: 0 } });
     expect(await recordRiderFeeForOrder(b.tx, "o1")).toBeNull();
     expect(b.state.writes).toBe(0);
-  });
-
-  it("uses base only when distance is missing", async () => {
-    const { tx } = fakeTx({ order: { ...order, deliveryDistanceKm: null }, settings: { riderBaseFee: 70, riderPerKmFee: 10 } });
-    expect(await recordRiderFeeForOrder(tx, "o1")).toBe(70);
   });
 });
 

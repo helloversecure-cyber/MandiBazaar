@@ -357,6 +357,14 @@ export const couponDefinitionSchema = z
         message: "Expiry date must be after the start date",
       });
     }
+    // M-12: don't let a coupon be saved already expired (expiry is end-of-day PKT).
+    if (d.expiryDate && d.expiryDate.getTime() < Date.now()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["expiryDate"],
+        message: "Expiry date can't be in the past",
+      });
+    }
   });
 
 export type CouponDefinitionInput = z.input<typeof couponDefinitionSchema>;

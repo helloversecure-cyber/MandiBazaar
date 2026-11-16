@@ -79,8 +79,8 @@ const PRICING: FieldDef[] = [
   { key: "minimumOrderAmount", label: "Minimum order amount", type: "number", prefix: "Rs", min: 0, step: "1", hint: "Whole rupees. 0 = no minimum." },
   { key: "platformCommissionPct", label: "Platform commission", type: "number", suffix: "%", min: 0, max: 50, step: "0.01", hint: "Taken from store sales at payout. 0–50%." },
   { key: "fullCodMaxOrderAmount", label: "Full cash-on-delivery limit", type: "number", prefix: "Rs", min: 0, max: 100000, step: "1", hint: "Orders with products up to this amount may pay the delivery fee in cash too. 0 = off." },
-  { key: "riderBaseFee", label: "Rider pay per delivery", type: "number", prefix: "Rs", min: 0, max: 5000, step: "1", hint: "Fixed amount a rider earns for each delivered order." },
-  { key: "riderPerKmFee", label: "Rider pay per km", type: "number", prefix: "Rs", suffix: "/km", min: 0, max: 500, step: "0.01", hint: "Extra rider pay per km of delivery distance. 0 = flat pay only." },
+  // NEW-01: the rider keeps the delivery fee, so there is no separate fixed
+  // per-delivery pay to configure (riderBaseFee / riderPerKmFee are no longer used).
 ];
 
 function toForm(d: Record<string, unknown>): FormState {

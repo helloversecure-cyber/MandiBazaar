@@ -178,9 +178,33 @@ export async function handleProductAction(
       );
     }
     const nextStatus = decision === "APPROVED" ? "ACTIVE" : "INACTIVE";
+
+    // NEW-07: a product must go live inside an ACTIVE category, otherwise it is
+    // invisible in the shop's category filter. A store can type a brand-new
+    // category name, which is created inactive (a suggestion for the admin), so on
+    // approval require an active category — and let the admin reassign it here.
+    let categoryUpdate: { categoryId?: string } = {};
+    if (decision === "APPROVED") {
+      const chosen =
+        typeof data?.categoryId === "string" && data.categoryId.trim()
+          ? data.categoryId.trim()
+          : previous.categoryId;
+      const cat = await prisma.category.findUnique({
+        where: { id: chosen },
+        select: { isActive: true },
+      });
+      if (!cat || !cat.isActive) {
+        return apiError(
+          "Assign an active category before approving — the store's suggested category isn't active yet (activate it or pick an existing one).",
+          400
+        );
+      }
+      if (chosen !== previous.categoryId) categoryUpdate = { categoryId: chosen };
+    }
+
     const product = await prisma.product.update({
       where: { id },
-      data: { status: nextStatus, moderationNote: decision === "APPROVED" ? null : reason },
+      data: { status: nextStatus, moderationNote: decision === "APPROVED" ? null : reason, ...categoryUpdate },
     });
     await writeAuditLog({
       userId: actor.id,

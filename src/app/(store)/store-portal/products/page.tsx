@@ -924,7 +924,11 @@ function StoreProductsPage() {
               fe.clear("salePrice");
             }}
           />
-          <FieldError message={fe.get("salePrice")} />
+          {/* M-24: the live "Must be lower than the regular price" note already
+              covers that case — don't also show the field error (duplicate). */}
+          {!(salePrice && saleNum >= priceNum && priceNum > 0) && (
+            <FieldError message={fe.get("salePrice")} />
+          )}
           <p className="mt-1 text-xs text-ink-subtle">
             {livePct > 0 ? (
               <span className="font-semibold text-deal-600">{livePct}% off · </span>
@@ -977,7 +981,9 @@ function StoreProductsPage() {
           </div>
           <FieldError message={fe.get("unit")} />
           <p className="mt-1 text-[11px] text-ink-subtle">
-            {unitValue ? `Customers see: Rs. ${price || "…"} / ${unitValue}` : "e.g. 1 kg, 500 g, 12 pc"}
+            {unitValue
+              ? `Customers see: Rs. ${price || "…"} / ${unitValue} — use a realistic pack size (e.g. 1 kg, 500 g, 12 pc)`
+              : "e.g. 1 kg, 500 g, 12 pc"}
             {legacyUnit && !unitName ? ` · Old unit “${legacyUnit}” — please choose from the list` : ""}
           </p>
         </div>

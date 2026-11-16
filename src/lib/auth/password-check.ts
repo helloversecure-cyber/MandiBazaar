@@ -8,7 +8,8 @@ import bcrypt from "bcryptjs";
 import type { Prisma, RoleName } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
-import { MSG, normalizeEmail } from "@/lib/validators/pk";
+import { MSG } from "@/lib/validators/pk";
+import { parseIdentifier, phoneLiteralVariants } from "@/lib/auth/identifier";
 import { isPlatformAdminRole, isRiderRole, isStorePortalRole } from "@/lib/auth/permissions";
 import {
   createFirebaseUser,
@@ -80,15 +81,29 @@ export async function verifyPasswordWithLockout(
   }
   if (password.length > 128) throw new Error("Invalid credentials");
 
-  const email = normalizeEmail(identifier);
-  if (!email) throw new Error(MSG.email);
+  // Accept an email OR a Pakistani mobile number. Firebase auth is email-based,
+  // so a phone sign-in resolves the account's email first, then verifies normally.
+  const parsed = parseIdentifier(identifier);
+  if (parsed.kind === "invalid") throw new Error(MSG.email);
 
-  const user = await prisma.user.findFirst({
-    where: { email: { equals: email, mode: "insensitive" }, isActive: true },
-    include: { role: true },
-  });
+  const user =
+    parsed.kind === "email"
+      ? await prisma.user.findFirst({
+          where: { email: { equals: parsed.normalized, mode: "insensitive" }, isActive: true },
+          include: { role: true },
+        })
+      : await prisma.user.findFirst({
+          where: { phone: { in: phoneLiteralVariants(parsed.normalized) }, isActive: true },
+          include: { role: true },
+        });
   // Don't reveal which part is wrong
   if (!user) throw new Error("Invalid credentials");
+
+  const email = user.email;
+  if (!email) {
+    // Phone-only account with no email can't use the email-based auth.
+    throw new Error("This account has no email set — please sign in with your email.");
+  }
 
   const now = Date.now();
   if (user.lockedUntil && user.lockedUntil.getTime() > now) {

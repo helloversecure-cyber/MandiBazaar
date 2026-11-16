@@ -9,6 +9,7 @@ type Log = {
   action: string;
   entity: string;
   entityId: string | null;
+  entityLabel?: string | null;
   createdAt: string;
   previousValue: unknown;
   newValue: unknown;
@@ -172,7 +173,7 @@ export default function AdminAuditLogsPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="break-all font-medium">
-                    {log.action} · {log.entity} {log.entityId}
+                    {log.action} · {log.entity} {log.entityLabel || log.entityId}
                   </p>
                   <p className="text-xs text-ink-subtle">
                     {log.user?.fullName || "System"} · {new Date(log.createdAt).toLocaleString()}

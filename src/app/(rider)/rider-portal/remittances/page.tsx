@@ -301,6 +301,8 @@ function SendPayment({
     setErr("");
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) { setErr("Enter a valid amount."); return; }
+    // M-17: cash is handed over in whole rupees — no 2.5-rupee amounts.
+    if (!Number.isInteger(amt)) { setErr("Enter a whole-rupee amount (no decimals)."); return; }
     if (amt > obligation.outstanding + 0.01) {
       setErr(`You only owe Rs ${obligation.outstanding.toLocaleString("en-PK")} on this order.`);
       return;

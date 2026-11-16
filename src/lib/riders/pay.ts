@@ -5,7 +5,7 @@
  */
 import { Prisma } from "@prisma/client";
 import { toNumber } from "@/lib/utils";
-import { computeRiderFee, DEFAULT_RIDER_PAY, type RiderPaySettings } from "./pay-rules";
+import { DEFAULT_RIDER_PAY, type RiderPaySettings } from "./pay-rules";
 
 export * from "./pay-rules";
 
@@ -33,16 +33,25 @@ export async function recordRiderFeeForOrder(tx: Db, orderId: string): Promise<n
       riderId: true,
       deliveredAt: true,
       deliveryDistanceKm: true,
+      deliveryFee: true,
+      deliveryFeePaid: true,
+      sponsoredDeliveryFee: true,
       delivery: { select: { riderFee: true } },
     },
   });
   if (!order || order.orderStatus !== "DELIVERED" || !order.riderId) return null;
   if (order.delivery?.riderFee != null) return toNumber(order.delivery.riderFee);
 
-  const settings = await getRiderPaySettings(tx);
-  const fee = computeRiderFee(
-    settings,
-    order.deliveryDistanceKm == null ? null : toNumber(order.deliveryDistanceKm)
+  // NEW-01 — "the rider keeps the delivery fee." The rider's pay for a delivery IS
+  // the delivery fee. They already keep the cash part they collected; the platform
+  // owes them only the part paid ONLINE (deliveryFeePaid) — Rs 0 for a normal COD
+  // order, so they are never paid twice. recordRiderFeeForOrder runs BEFORE the
+  // cash is recorded, so deliveryFeePaid here is the online portion only.
+  // NEW-08 — on a store-sponsored free delivery the customer paid Rs 0, so the
+  // store funds the rider's (notional) fee: add sponsoredDeliveryFee.
+  const fee = Math.max(
+    0,
+    Math.round(toNumber(order.deliveryFeePaid) + toNumber(order.sponsoredDeliveryFee))
   );
 
   if (!order.delivery) {

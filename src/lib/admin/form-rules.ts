@@ -91,6 +91,9 @@ const zRiderAccountNumber = z
 export const riderQuickAddSchema = z.object({
   name: zPersonName,
   phone: zMobile,
+  // Email is enforced as required by createRiderWithLogin (Firebase auth is
+  // email-based, so a rider without one would be locked out). Kept optional at the
+  // schema layer so the server returns a clear email-specific message.
   email: optional(zEmail),
   password: zTempPassword,
   cnicNumber: zCnic,

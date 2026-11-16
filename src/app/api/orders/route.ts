@@ -304,6 +304,22 @@ export async function PATCH(req: Request) {
         );
       }
 
+      // NEW-05: don't let a customer cancel into a confusing "no payment to refund"
+      // state while a JazzCash receipt is still being verified. Hold the cancel until
+      // MandiBazaar checks it — if the money arrived, admin refunds it.
+      if (!isAdmin) {
+        const pendingProof = await prisma.paymentProof.findFirst({
+          where: { orderId: order.id, status: "PENDING_REVIEW" },
+          select: { id: true },
+        });
+        if (pendingProof) {
+          return apiError(
+            "Your payment receipt is being verified — please wait for MandiBazaar to check it before cancelling. If your payment arrived, it will be refunded.",
+            409
+          );
+        }
+      }
+
       const typedReason =
         typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
       if (isAdmin && !isOwner && !typedReason) {

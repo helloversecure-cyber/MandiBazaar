@@ -138,14 +138,16 @@ describe("dashboard revenue reconciliation (QA P1)", () => {
     expect(r.orderCount).toBe(3);
     expect(r.grossProductSales).toBe(2230);
     expect(r.discounts).toBe(100);
-    expect(r.deliveryRevenue).toBe(350);
+    // NEW-01: delivery fee is the rider's, so no delivery revenue and the fee
+    // portion of each payment is excluded from platform money.
+    expect(r.deliveryRevenue).toBe(0);
     expect(r.refunds).toBe(200);
-    expect(r.netSales).toBe(2230 - 100 + 350 - 200);
-    expect(r.onlinePayments).toBe(500 + 100 + 150);
-    expect(r.cashCollected).toBe(900);
-    expect(r.moneyReceived).toBe(1650);
+    expect(r.netSales).toBe(2230 - 100 - 200); // products − discount − refunds = 1930
+    expect(r.onlinePayments).toBe(400); // a: Rs 500 online − Rs 100 fee = Rs 400 product; b/c fee-only online
+    expect(r.cashCollected).toBe(900); // c: Rs 900 cash, all products (fee was paid online)
+    expect(r.moneyReceived).toBe(1300); // 400 online + 900 cash
     expect(r.codToCollect).toBe(830);
-    expect(r.revenuePaid).toBe(1650 - 200);
+    expect(r.revenuePaid).toBe(1300 - 200);
     expect(r.netSales).toBe(r.moneyReceived + r.codToCollect - r.refunds);
     expect(r.reconciles).toBe(true);
     expect(r.overRecorded).toBe(0);
@@ -166,9 +168,9 @@ describe("dashboard revenue reconciliation (QA P1)", () => {
         cashCollected: 400,
       }),
     ]);
-    expect(r.onlinePayments).toBe(500);
+    expect(r.onlinePayments).toBe(400); // Rs 900 captured − Rs 100 fee, capped at Rs 400 product
     expect(r.cashCollected).toBe(0);
-    expect(r.moneyReceived).toBe(500);
+    expect(r.moneyReceived).toBe(400);
     expect(r.overRecorded).toBe(800);
     expect(r.overRecordedOrders).toEqual(["ORD-20261010-000004"]);
     expect(r.reconciles).toBe(true);

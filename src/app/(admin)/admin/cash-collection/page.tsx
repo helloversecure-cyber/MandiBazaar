@@ -198,6 +198,16 @@ function QueueCard({ s, onAct }: { s: Sub; onAct: (body: Record<string, unknown>
       await confirm({ title: "Enter the cash amount", message: "Type the actual cash received before confirming.", confirmLabel: "OK" });
       return;
     }
+    // NEW-11: warn up front when the typed amount is more than the rider owes
+    // (the server also refuses it, but this catches a slip before submitting).
+    if (amt > s.outstanding + 0.5) {
+      await confirm({
+        title: "More than owed",
+        message: `${s.rider?.name ?? "This rider"} only owes ${formatCurrency(s.outstanding)}. Enter an amount up to that.`,
+        confirmLabel: "OK",
+      });
+      return;
+    }
     const { confirmed } = await confirm({
       title: "Confirm cash received?",
       message: `Record ${formatCurrency(amt)} received from ${s.rider?.name ?? "this rider"}. This settles their obligation and can lift a COD restriction.`,

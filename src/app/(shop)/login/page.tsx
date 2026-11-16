@@ -9,8 +9,8 @@ import { ShopContainer } from "@/components/layout/ShopContainer";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { FieldError, inputClass } from "@/components/ui/FieldError";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { MSG, normalizeEmail } from "@/lib/validators/pk";
-import { safeCallbackUrl } from "@/lib/auth/identifier";
+import { MSG } from "@/lib/validators/pk";
+import { parseIdentifier, safeCallbackUrl } from "@/lib/auth/identifier";
 import {
   EMAIL_NOT_VERIFIED,
   continueAfterSignIn,
@@ -65,8 +65,8 @@ function LoginForm() {
     e.preventDefault();
     setError("");
     setNeedsVerify(false);
-    if (!normalizeEmail(email)) {
-      setIdError(MSG.email);
+    if (parseIdentifier(email).kind === "invalid") {
+      setIdError("Enter a valid email or mobile number");
       return;
     }
     setIdError("");
@@ -125,13 +125,12 @@ function LoginForm() {
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <FieldLabel required htmlFor="login-email">Email</FieldLabel>
+            <FieldLabel required htmlFor="login-email">Email or mobile number</FieldLabel>
             <input
               id="login-email"
-              type="email"
-              inputMode="email"
+              type="text"
               className={inputClass(!!idError, LOGIN_INPUT)}
-              placeholder="e.g. ali@gmail.com"
+              placeholder="ali@gmail.com or 03001234567"
               value={email}
               maxLength={100}
               aria-invalid={!!idError}

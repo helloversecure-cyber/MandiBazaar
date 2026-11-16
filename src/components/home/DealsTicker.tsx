@@ -52,7 +52,7 @@ export function DealsTicker({
   const loop = [...items, ...items, ...(items.length < 3 ? [...items, ...items] : [])];
 
   return (
-    <div className="overflow-hidden border-b border-orange-200/60 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50">
+    <div className="overflow-hidden border-b border-orange-200/60 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 dark:border-orange-500/20 dark:from-orange-500/10 dark:via-amber-500/10 dark:to-orange-500/10">
       <div className="animate-marquee flex w-max gap-8 py-2">
         {loop.map((item, i) => (
           <Link
@@ -60,11 +60,11 @@ export function DealsTicker({
             href={item.href}
             aria-hidden={i >= items.length ? true : undefined}
             tabIndex={i >= items.length ? -1 : undefined}
-            className="flex shrink-0 items-center gap-2 text-xs font-semibold text-orange-800 transition hover:text-deal-600 sm:text-sm"
+            className="flex shrink-0 items-center gap-2 text-xs font-semibold text-orange-800 transition hover:text-deal-600 dark:text-orange-200 sm:text-sm"
           >
             <item.icon className="h-3.5 w-3.5 text-deal-500" />
             {item.text}
-            <span className="text-orange-300">•</span>
+            <span className="text-orange-300 dark:text-orange-500/50">•</span>
           </Link>
         ))}
       </div>

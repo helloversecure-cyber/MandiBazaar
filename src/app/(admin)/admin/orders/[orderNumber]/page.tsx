@@ -271,12 +271,14 @@ export default function AdminOrderDetailPage({ params }: { params: { orderNumber
 
   const a = order.admin;
   const addr = order.deliveryAddressSnapshot || {};
+  // M-10: cash is collected on delivery, so only offer "Record cash received"
+  // once the order is actually DELIVERED (not while it's still being prepared).
   const codOpen =
     order.remainingAmount > 0 &&
     !order.cashCollection &&
     (["CASH_ON_DELIVERY", "PARTIALLY_PAID"].includes(order.productPaymentStatus) ||
       order.deliveryFeePaymentStatus === "CASH_ON_DELIVERY") &&
-    !["PENDING_PAYMENT", "CANCELLED", "FAILED", "RETURNED"].includes(order.orderStatus);
+    order.orderStatus === "DELIVERED";
 
   return (
     <div className="space-y-6">
@@ -439,7 +441,7 @@ export default function AdminOrderDetailPage({ params }: { params: { orderNumber
               />
             )}
             <Line
-              k={`Delivery fee${order.deliveryDistanceKm ? ` (${Number(order.deliveryDistanceKm).toFixed(1)} km)` : ""}`}
+              k="Delivery fee"
               v={formatCurrency(order.deliveryFee)}
             />
             <Line k="Order total" v={formatCurrency(order.grandTotal)} strong />

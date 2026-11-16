@@ -75,7 +75,7 @@ export default function RiderEarningsPage() {
       <div className="reveal grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat icon={<Wallet className="h-4 w-4" />} label="Available to be paid" value={rs(data.available)} accent />
         <Stat icon={<Bike className="h-4 w-4" />} label="Completed deliveries" value={String(data.completedDeliveries)} />
-        <Stat icon={<Clock className="h-4 w-4" />} label="Pending deliveries" value={String(data.pendingCount)} />
+        <Stat icon={<Clock className="h-4 w-4" />} label="Unpaid deliveries" value={String(data.pendingCount)} />
         <Stat icon={<CheckCircle2 className="h-4 w-4" />} label="Paid to date" value={rs(data.paid)} />
       </div>
 
