@@ -754,6 +754,7 @@ export default function CheckoutPage() {
                   className={fe.get("fullName") ? inputErrCls : inputCls}
                   placeholder="Full name"
                   autoComplete="name"
+                  maxLength={60}
                   aria-invalid={fe.has("fullName")}
                   value={form.fullName}
                   onChange={(e) => {

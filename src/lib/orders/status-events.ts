@@ -120,8 +120,12 @@ export function buildOrderJourney(
   }
 
   const current = STATUS_INDEX[order.orderStatus] ?? 0;
+  // M-5: Delivered is the final success state — mark it done, not "current"
+  // (otherwise the last step shows "Delivered — In progress").
+  const deliveredDone = order.orderStatus === "DELIVERED";
   return JOURNEY.map((s, i) => {
-    const state: JourneyStepState = i < current ? "done" : i === current ? "current" : "upcoming";
+    const state: JourneyStepState =
+      i < current ? "done" : i === current ? (deliveredDone ? "done" : "current") : "upcoming";
     let at: string | null = null;
     if (s.key === "PLACED") at = iso(order.createdAt);
     else if (s.key === "DELIVERED") at = iso(order.deliveredAt) ?? stepTime(s.statuses);

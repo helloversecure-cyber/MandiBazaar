@@ -6,6 +6,8 @@ import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { ImageUploadField } from "@/components/ui/ImageUploadField";
 import { Pagination } from "@/components/ui/Pagination";
+import { useConfirm } from "@/components/ui/feedback";
+import { ORDER_STATUS_LABELS } from "@/lib/orders/state-machine";
 import { Search } from "lucide-react";
 
 type Addr = {
@@ -47,6 +49,7 @@ type Order = {
 };
 
 export default function RiderDeliveriesPage() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<Order[]>([]);
   const [pending, setPending] = useState(false);
   const [filter, setFilter] = useState("");
@@ -280,7 +283,7 @@ export default function RiderDeliveriesPage() {
                 <div>
                   <p className="text-lg font-bold text-ink">{o.orderNumber}</p>
                   <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                    {o.orderStatus.replace(/_/g, " ")}
+                    {ORDER_STATUS_LABELS[o.orderStatus as keyof typeof ORDER_STATUS_LABELS] || o.orderStatus.replace(/_/g, " ")}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -304,6 +307,25 @@ export default function RiderDeliveriesPage() {
                   <p className="text-xs text-ink-subtle">
                     Customer: {o.customer?.fullName} · {o.customer?.phone}
                   </p>
+                  {/* M-18: quick actions so the rider can call or navigate in one tap. */}
+                  <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
+                    {o.customer?.phone && (
+                      <a
+                        href={`tel:${o.customer.phone}`}
+                        className="rounded-full border border-line px-2.5 py-1 font-medium text-brand-700 hover:bg-brand-50"
+                      >
+                        Call customer
+                      </a>
+                    )}
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formatAddr(o.deliveryAddressSnapshot))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-line px-2.5 py-1 font-medium text-brand-700 hover:bg-brand-50"
+                    >
+                      Open in Maps
+                    </a>
+                  </div>
                 </div>
                 <div>
                   <p className="font-semibold text-ink">Pickups</p>
@@ -444,13 +466,21 @@ export default function RiderDeliveriesPage() {
                       disabled={
                         busyId === o.id || (online && !proofOk)
                       }
-                      onClick={() =>
-                        act(o.id, "MARK_DELIVERED", {
-                          amountCollected: needsCod
-                            ? o.remainingAmount
-                            : undefined,
-                        })
-                      }
+                      onClick={async () => {
+                        // NEW-06: confirm before closing the order (no accidental
+                        // one-tap delivery). Spells out the cash the rider collects.
+                        const r = await confirm({
+                          title: `Mark order ${o.orderNumber} delivered?`,
+                          message: needsCod
+                            ? `Confirm you handed over the order and collected ${cashText(o)} cash. This closes the order and records the cash.`
+                            : "Confirm you handed over the order to the customer. This closes the order.",
+                          confirmLabel: needsCod ? `Collected ${cashText(o)} — deliver` : "Yes, delivered",
+                        });
+                        if (!r.confirmed) return;
+                        await act(o.id, "MARK_DELIVERED", {
+                          amountCollected: needsCod ? o.remainingAmount : undefined,
+                        });
+                      }}
                     >
                       {needsCod
                         ? `Collected ${cashText(o)} — mark delivered`

@@ -217,21 +217,24 @@ describe("revenue with full cash-on-delivery orders", () => {
     payments: [{ type: "DELIVERY_FEE", status: "SUCCESS", amount: 100 }],
   });
 
-  it("before collection: fee is still to collect, not delivery revenue, and it reconciles", () => {
+  // NEW-01: the rider keeps the delivery fee, so it is never platform revenue
+  // (not booked as delivery revenue, not counted in platform cash). Products only.
+  it("before collection: the delivery fee is the rider's (no revenue); products are COD to collect; reconciles", () => {
     const r = summarizeRevenue([
       normal,
       rev({ id: "f", subtotal: 600, discount: 100, deliveryFee: 150, deliveryFeePaymentStatus: "CASH_ON_DELIVERY" }),
     ]);
-    expect(r.deliveryRevenue).toBe(100);
-    expect(r.cashFeesToCollect).toBe(150);
-    expect(r.codToCollect).toBe(830 + 500 + 150);
-    expect(r.netSales).toBe(830 + 500 + 100);
-    expect(r.netSales + r.cashFeesToCollect).toBe(r.moneyReceived + r.codToCollect - r.refunds);
+    expect(r.deliveryRevenue).toBe(0);
+    expect(r.cashFeesToCollect).toBe(0);
+    expect(r.codToCollect).toBe(830 + 500); // products only (normal 830 + f 500)
+    expect(r.netSales).toBe(830 + 500);
+    expect(r.moneyReceived).toBe(0);
+    expect(r.netSales).toBe(r.moneyReceived + r.codToCollect - r.refunds);
     expect(r.reconciles).toBe(true);
     expect(r.overRecorded).toBe(0);
   });
 
-  it("after collection: fee counts as delivery revenue and cash collected", () => {
+  it("after collection: the delivery fee the rider kept is NOT platform cash/revenue; products reconcile", () => {
     const r = summarizeRevenue([
       normal,
       rev({
@@ -245,8 +248,8 @@ describe("revenue with full cash-on-delivery orders", () => {
         cashCollected: 650,
       }),
     ]);
-    expect(r.deliveryRevenue).toBe(250);
-    expect(r.cashCollected).toBe(650);
+    expect(r.deliveryRevenue).toBe(0);
+    expect(r.cashCollected).toBe(500); // Rs 650 collected − Rs 150 delivery fee the rider keeps
     expect(r.cashFeesToCollect).toBe(0);
     expect(r.codToCollect).toBe(830);
     expect(r.overRecorded).toBe(0);

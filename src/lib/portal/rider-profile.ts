@@ -28,15 +28,27 @@ export const zRiderAccount = z.string({ message: MSG.bankAccount }).transform((v
 });
 
 /** Empty field = keep what is saved now. */
-export const riderProfileUpdateSchema = z.object({
-  vehicleType: optional(zVehicleType),
-  accountTitle: optional(zPersonName),
-  bankName: optional(zBusinessName),
-  accountNumber: optional(zRiderAccount),
-  jazzCashNumber: optional(zJazzCash),
-  removeJazzCash: z.boolean().optional(),
-  removeBank: z.boolean().optional(),
-});
+export const riderProfileUpdateSchema = z
+  .object({
+    vehicleType: optional(zVehicleType),
+    accountTitle: optional(zPersonName),
+    bankName: optional(zBusinessName),
+    accountNumber: optional(zRiderAccount),
+    jazzCashNumber: optional(zJazzCash),
+    removeJazzCash: z.boolean().optional(),
+    removeBank: z.boolean().optional(),
+  })
+  // M-20: a bank account can't be saved without the bank name and account holder.
+  .superRefine((d, ctx) => {
+    if (d.accountNumber && !d.removeBank) {
+      if (!d.bankName) {
+        ctx.addIssue({ code: "custom", path: ["bankName"], message: "Enter the bank name for this account" });
+      }
+      if (!d.accountTitle) {
+        ctx.addIssue({ code: "custom", path: ["accountTitle"], message: "Enter the account holder's name" });
+      }
+    }
+  });
 
 export type RiderEarningsPeriod = { key: string; label: string; since?: Date };
 

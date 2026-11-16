@@ -90,6 +90,8 @@ export default function AdminProductsPage() {
   const toast = useToast();
   const [items, setItems] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  // NEW-07: category the admin picks (from active categories) when approving a product.
+  const [approveCat, setApproveCat] = useState<Record<string, string>>({});
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
@@ -205,13 +207,33 @@ export default function AdminProductsPage() {
   }
 
   async function approveProduct(p: Product) {
+    const chosenCat = approveCat[p.id] || "";
+    // N8: remind the admin to check the photo actually matches the product before
+    // it goes live, and show it in the confirm.
     const r = await confirm({
       title: `Approve ${p.name}?`,
-      message: `It goes live in the shop immediately at ${formatCurrency(p.salePrice || p.price)}.`,
-      confirmLabel: "Approve product",
+      message: (
+        <span>
+          {p.images?.[0]?.url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.images[0].url} alt="" className="mb-2 h-24 w-24 rounded-lg object-cover" />
+          )}
+          Check the photo actually shows <strong>{p.name}</strong> (not a wrong or
+          placeholder image). It goes live at {formatCurrency(p.salePrice || p.price)}.
+        </span>
+      ),
+      confirmLabel: "Photo checks out — approve",
     });
     if (!r.confirmed) return;
-    const data = await send("PATCH", { resource: "product", id: p.id, data: { action: "REVIEW", decision: "APPROVED" } }, p.id);
+    const data = await send(
+      "PATCH",
+      {
+        resource: "product",
+        id: p.id,
+        data: { action: "REVIEW", decision: "APPROVED", ...(chosenCat ? { categoryId: chosenCat } : {}) },
+      },
+      p.id
+    );
     if (!data) return;
     toast.success(`${p.name} approved — now live in the shop`, {
       action: { label: "View active", onClick: () => switchTab("ACTIVE") },
@@ -535,6 +557,22 @@ export default function AdminProductsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         {p.status === "DRAFT" && (
                           <>
+                            {/* NEW-07: let the admin put the product in an ACTIVE category
+                                on approval (the store's free-typed category is inactive). */}
+                            <select
+                              value={approveCat[p.id] || ""}
+                              onChange={(e) => setApproveCat((m) => ({ ...m, [p.id]: e.target.value }))}
+                              className="rounded-lg border border-line bg-card px-2 py-1 text-xs"
+                              aria-label="Category on approval"
+                              title={`Current: ${p.category?.name || "—"}`}
+                            >
+                              <option value="">Keep category ({p.category?.name || "—"})</option>
+                              {categories.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
                             <button
                               type="button"
                               disabled={busy}

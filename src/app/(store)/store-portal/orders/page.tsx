@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { useToast } from "@/components/ui/feedback";
+import { useToast, useConfirm } from "@/components/ui/feedback";
 import { plural } from "@/lib/portal/format";
 import {
   STORE_FULFILLMENT_LABELS,
@@ -59,8 +59,34 @@ function badgeClass(orderStatus: string, status: string) {
   return "bg-brand-100 text-brand-800";
 }
 
+/** Human payment-method label (M-6). */
+function payMethodText(method: string): string {
+  const m: Record<string, string> = {
+    COD: "Cash on delivery",
+    CASH_ON_DELIVERY: "Cash on delivery",
+    JAZZCASH_QR: "JazzCash QR",
+    JAZZCASH: "JazzCash",
+    MIXED: "Online + cash",
+  };
+  return m[method] || method.replace(/_/g, " ").toLowerCase();
+}
+
+/** Human payment-status label — never duplicates the method (M-6). */
+function payStatusText(status: string): string {
+  const s: Record<string, string> = {
+    PAID: "paid",
+    PENDING: "pending",
+    CASH_ON_DELIVERY: "to collect on delivery",
+    PARTIALLY_PAID: "partly paid",
+    FAILED: "failed",
+    REFUNDED: "refunded",
+  };
+  return s[status] || status.replace(/_/g, " ").toLowerCase();
+}
+
 export default function StoreOrdersPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState<Fulfillment[]>([]);
   const [tab, setTab] = useState<StoreOrderTab>("prepare");
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -101,6 +127,14 @@ export default function StoreOrdersPage() {
   }, [load]);
 
   async function advance(f: Fulfillment, status: string) {
+    // M-7: confirm before changing an order's status (no accidental one-tap).
+    const label = STORE_FULFILLMENT_LABELS[status as keyof typeof STORE_FULFILLMENT_LABELS] ?? status;
+    const r = await confirm({
+      title: `Mark ${f.order.orderNumber} "${label}"?`,
+      message: "This updates the order's status. You can't undo it.",
+      confirmLabel: label,
+    });
+    if (!r.confirmed) return;
     setBusyId(f.id);
     try {
       const res = await fetch("/api/store", {
@@ -200,7 +234,8 @@ export default function StoreOrdersPage() {
           // Next single step + shortcut to "ready"
           const next = actions[0];
           const open = openId === f.id;
-          const qty = f.order.items.reduce((s, i) => s + i.quantity, 0);
+          // M-6: "items" = number of distinct products (not total quantity).
+          const itemCount = f.order.items.length;
           return (
             <div key={f.id} className="rounded-2xl bg-card p-4 shadow-card">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -219,7 +254,7 @@ export default function StoreOrdersPage() {
                   <p className="mt-0.5 text-sm text-ink-subtle">
                     {f.order.customer.fullName}
                     {f.order.deliveryArea ? ` · ${f.order.deliveryArea}` : ""} ·{" "}
-                    {new Date(f.order.createdAt).toLocaleDateString()} · {plural(qty, "item")}
+                    {new Date(f.order.createdAt).toLocaleDateString()} · {plural(itemCount, "item")}
                   </p>
                   {f.order.rider && (
                     <p className="mt-1 text-xs text-ink-muted">
@@ -278,8 +313,8 @@ export default function StoreOrdersPage() {
                     </p>
                     <p>
                       <span className="text-ink-subtle">Payment: </span>
-                      {f.order.paymentMethod.replace(/_/g, " ").toLowerCase()} ·{" "}
-                      {f.order.productPaymentStatus.replace(/_/g, " ").toLowerCase()}
+                      {/* M-6: show the method once + a clear status (no "cash on delivery · cash on delivery"). */}
+                      {payMethodText(f.order.paymentMethod)} · {payStatusText(f.order.productPaymentStatus)}
                     </p>
                     {f.order.cancelReason && (
                       <p className="text-red-700">

@@ -203,9 +203,21 @@ export async function GET(req: NextRequest) {
         0
       );
       const totalNet = pending.reduce((s, p) => s + toNumber(p.netAmount), 0);
+      // M-11: the amount that CAN be settled right now (already-generated pending
+      // payouts + delivered orders not yet calculated). Shown up front so the page
+      // doesn't read Rs 0 until the admin clicks "Calculate payouts" (matches Finance).
+      const settleable = await previewSettlement();
+      const settleableNet = settleable.rows.reduce((s, r) => s + r.netAmount, 0);
+      const settleableGross = settleable.rows.reduce((s, r) => s + r.gross, 0);
+      const settleableCommission = settleable.rows.reduce((s, r) => s + r.commissionAmount, 0);
+      const settleableCount = settleable.rows.length;
       return apiSuccess({
         defaultCommissionPct: toNumber(settings?.platformCommissionPct ?? 5),
         pendingCount: pending.length,
+        settleableNet,
+        settleableGross,
+        settleableCommission,
+        settleableCount,
         totalGross,
         totalCommission,
         totalNet,

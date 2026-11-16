@@ -57,5 +57,12 @@ export async function continueAfterSignIn(dest: string) {
     window.location.assign(`/onboarding/${slug}?next=${encodeURIComponent(dest || roleDest)}`);
     return;
   }
+  // Safety net (NEW-03): a store owner / rider / admin who signed in on the
+  // customer login would otherwise land on the customer site — send them to their
+  // own portal instead of leaving them signed in as if they were a customer.
+  if (role && role !== "CUSTOMER" && (dest === "/" || dest === "" || dest === "/products")) {
+    window.location.assign(getDefaultDest(role));
+    return;
+  }
   window.location.assign(dest);
 }

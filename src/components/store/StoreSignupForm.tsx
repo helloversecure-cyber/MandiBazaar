@@ -436,7 +436,15 @@ export function StoreSignupForm({ onSwitchToLogin }: { onSwitchToLogin?: () => v
   };
 
   if (done) {
-    return <VerifyEmailNotice email={done.email} devLink={done.devLink} password={owner.password} />;
+    return (
+      <VerifyEmailNotice
+        email={done.email}
+        devLink={done.devLink}
+        password={owner.password}
+        loginHref="/store?tab=login"
+        registerHref="/store?tab=signup"
+      />
+    );
   }
 
   return (

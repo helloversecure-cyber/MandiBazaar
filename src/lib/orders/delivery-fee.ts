@@ -36,6 +36,11 @@ export type DeliveryFeeBasis = "FREE_PRODUCTS" | "FREE_THRESHOLD" | "DISTANCE" |
 
 export type DeliveryFeeResult = {
   fee: number;
+  /** What the delivery would cost regardless of free-delivery (the notional fee). */
+  notionalFee: number;
+  /** NEW-08: notional fee a STORE sponsors on a free-delivery order (rider is paid
+   *  this and it is deducted from the store payout). 0 for normal / threshold-free. */
+  sponsoredFee: number;
   isFree: boolean;
   basis: DeliveryFeeBasis;
   reason: string;
@@ -150,6 +155,63 @@ function applyCap(fee: number, settings: DeliverySettings) {
   return { fee, capped: false };
 }
 
+/**
+ * The distance-based or flat delivery fee, IGNORING free-delivery — i.e. what the
+ * delivery actually costs (the notional fee). NEW-08 needs this so a store-sponsored
+ * free delivery can still pay the rider and charge it back to the store.
+ */
+function rawDeliveryFee(
+  input: DeliveryFeeInput,
+  settings: DeliverySettings
+): { fee: number; oneWayKm: number; distanceKm: number; capped: boolean; basis: "DISTANCE" | "FLAT"; reason: string } {
+  const { ratePerKm } = settings;
+  const destLat = input.latitude;
+  const destLon = input.longitude;
+  const anyStorePinned = input.stores.some((s) => s.latitude != null && s.longitude != null);
+
+  if (destLat != null && destLon != null && anyStorePinned) {
+    let pinnedOneWayKm = 0;
+    let unpinnedFee = 0;
+    for (const store of input.stores) {
+      if (store.latitude == null || store.longitude == null) {
+        unpinnedFee += settings.defaultFee;
+        continue;
+      }
+      pinnedOneWayKm += haversineKm(store.latitude, store.longitude, destLat, destLon);
+    }
+    const billedKm = roundTripKm(pinnedOneWayKm);
+    const raw = Math.max(ratePerKm, Math.round(billedKm * ratePerKm + unpinnedFee));
+    const { fee, capped } = applyCap(raw, settings);
+    const oneWayRounded = Math.round(pinnedOneWayKm * 10) / 10;
+    const billedRounded = Math.round(billedKm * 10) / 10;
+    return {
+      fee,
+      capped,
+      basis: "DISTANCE",
+      oneWayKm: Math.round(pinnedOneWayKm * 1000) / 1000,
+      distanceKm: Math.round(billedKm * 1000) / 1000,
+      reason:
+        `Rs ${ratePerKm}/km × (${oneWayRounded} km go + ${oneWayRounded} km return = ${billedRounded} km)` +
+        (capped ? ` · capped at Rs ${fee.toLocaleString("en-PK")}` : ""),
+    };
+  }
+
+  const storeCount = Math.max(1, input.stores.length);
+  const { fee, capped } = applyCap(flatDeliveryFee(settings, storeCount), settings);
+  const impliedOneWay = ratePerKm > 0 ? Math.round((fee / ratePerKm / 2) * 10) / 10 : 0;
+  return {
+    fee,
+    capped,
+    basis: "FLAT",
+    oneWayKm: impliedOneWay,
+    distanceKm: impliedOneWay * 2,
+    reason:
+      storeCount > 1
+        ? `Delivery fee for ${storeCount} stores`
+        : `Standard delivery fee for ${input.city || "your area"}`,
+  };
+}
+
 /** Pure fee calculation (unit-tested). */
 export function computeDeliveryFee(
   input: DeliveryFeeInput,
@@ -170,93 +232,47 @@ export function computeDeliveryFee(
     maxDeliveryFee: settings.maxDeliveryFee,
   };
 
-  if (input.allProductsFreeDelivery) {
-    return {
-      ...base,
-      fee: 0,
-      isFree: true,
-      basis: "FREE_PRODUCTS",
-      reason: "Free delivery — every product in your cart has free delivery",
-      oneWayKm: 0,
-      distanceKm: 0,
-      freeDeliveryShortBy: 0,
-      capped: false,
-    };
-  }
+  // Always compute the real (notional) fee first, so free-delivery can still fund
+  // the rider (NEW-08) and reports know what the delivery was worth.
+  const raw = rawDeliveryFee(input, settings);
+  const storeFree = Boolean(input.allProductsFreeDelivery);
+  const thresholdFree = threshold > 0 && subtotal >= threshold;
 
-  if (threshold > 0 && subtotal >= threshold) {
+  if (storeFree || thresholdFree) {
     return {
       ...base,
       fee: 0,
+      notionalFee: raw.fee,
+      // Only a STORE's own free-delivery is charged back to that store; a platform
+      // threshold promo is the platform's cost.
+      sponsoredFee: storeFree ? raw.fee : 0,
       isFree: true,
-      basis: "FREE_THRESHOLD",
-      reason: `Free delivery on orders of Rs ${threshold.toLocaleString("en-PK")} or more`,
-      oneWayKm: 0,
-      distanceKm: 0,
+      basis: storeFree ? "FREE_PRODUCTS" : "FREE_THRESHOLD",
+      reason: storeFree
+        ? "Free delivery — every product in your cart has free delivery"
+        : `Free delivery on orders of Rs ${threshold.toLocaleString("en-PK")} or more`,
+      oneWayKm: raw.oneWayKm,
+      distanceKm: raw.distanceKm,
       freeDeliveryShortBy: 0,
-      capped: false,
+      capped: raw.capped,
     };
   }
 
   const freeDeliveryShortBy =
     threshold > 0 ? Math.ceil((threshold - subtotal) * 100) / 100 : 0;
 
-  const destLat = input.latitude;
-  const destLon = input.longitude;
-  const anyStorePinned = input.stores.some((s) => s.latitude != null && s.longitude != null);
-
-  if (destLat != null && destLon != null && anyStorePinned) {
-    // Sum store→customer one-way distances for multi-store pickups.
-    // A store without a pin is billed at the default fee instead of a distance.
-    let pinnedOneWayKm = 0;
-    let unpinnedFee = 0;
-    for (const store of input.stores) {
-      if (store.latitude == null || store.longitude == null) {
-        unpinnedFee += settings.defaultFee;
-        continue;
-      }
-      pinnedOneWayKm += haversineKm(store.latitude, store.longitude, destLat, destLon);
-    }
-
-    const billedKm = roundTripKm(pinnedOneWayKm);
-    const raw = Math.max(ratePerKm, Math.round(billedKm * ratePerKm + unpinnedFee));
-    const { fee, capped } = applyCap(raw, settings);
-    const oneWayRounded = Math.round(pinnedOneWayKm * 10) / 10;
-    const billedRounded = Math.round(billedKm * 10) / 10;
-
-    return {
-      ...base,
-      fee,
-      isFree: false,
-      basis: "DISTANCE",
-      reason:
-        `Rs ${ratePerKm}/km × (${oneWayRounded} km go + ${oneWayRounded} km return = ${billedRounded} km)` +
-        (capped ? ` · capped at Rs ${fee.toLocaleString("en-PK")}` : ""),
-      oneWayKm: Math.round(pinnedOneWayKm * 1000) / 1000,
-      distanceKm: Math.round(billedKm * 1000) / 1000,
-      freeDeliveryShortBy,
-      capped,
-    };
-  }
-
-  // No usable map pins: flat default fee (+ extra per additional store)
-  const storeCount = Math.max(1, input.stores.length);
-  const { fee, capped } = applyCap(flatDeliveryFee(settings, storeCount), settings);
-  const impliedOneWay = ratePerKm > 0 ? Math.round((fee / ratePerKm / 2) * 10) / 10 : 0;
-
   return {
     ...base,
-    fee,
+    fee: raw.fee,
+    notionalFee: raw.fee,
+    sponsoredFee: 0,
     isFree: false,
-    basis: "FLAT",
-    reason:
-      storeCount > 1
-        ? `Delivery fee for ${storeCount} stores`
-        : `Standard delivery fee for ${input.city || "your area"}`,
-    oneWayKm: impliedOneWay,
-    distanceKm: impliedOneWay * 2,
+    basis: raw.basis,
+    reason: raw.reason,
+    oneWayKm: raw.oneWayKm,
+    distanceKm: raw.distanceKm,
     freeDeliveryShortBy,
-    capped,
+    capped: raw.capped,
   };
 }
 

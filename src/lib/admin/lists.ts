@@ -156,8 +156,29 @@ export async function listAuditLogs(sp: URLSearchParams) {
         })
       : Promise.resolve(null),
   ]);
+  // M-13: resolve Order ids to readable order numbers so the audit list shows
+  // "Order ORD-…" instead of the internal cuid.
+  const orderIds = Array.from(
+    new Set(items.filter((i) => i.entity === "Order" && i.entityId).map((i) => i.entityId as string))
+  );
+  const orderNumbers = orderIds.length
+    ? new Map(
+        (
+          await prisma.order.findMany({
+            where: { id: { in: orderIds } },
+            select: { id: true, orderNumber: true },
+          })
+        ).map((o) => [o.id, o.orderNumber] as const)
+      )
+    : new Map<string, string>();
+  const itemsWithLabel = items.map((i) => ({
+    ...i,
+    entityLabel:
+      i.entity === "Order" && i.entityId ? orderNumbers.get(i.entityId) ?? null : null,
+  }));
+
   return apiSuccess({
-    items,
+    items: itemsWithLabel,
     pagination: paginationMeta(page, limit, total),
     ...(actions ? { actions: actions.map((a) => ({ action: a.action, count: a._count._all })) } : {}),
   });

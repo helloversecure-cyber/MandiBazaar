@@ -74,9 +74,12 @@ export default function AdminRefundsPage() {
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [extRef, setExtRef] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
 
   const load = useCallback(() => {
-    fetch(`/api/refunds?page=${page}&limit=${PAGE_SIZE}`)
+    // R6: search the refunds list by order number.
+    fetch(`/api/refunds?page=${page}&limit=${PAGE_SIZE}${q ? `&q=${encodeURIComponent(q)}` : ""}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.success) {
@@ -86,7 +89,7 @@ export default function AdminRefundsPage() {
           }
         }
       });
-  }, [page]);
+  }, [page, q]);
 
   useEffect(() => {
     load();
@@ -218,10 +221,36 @@ export default function AdminRefundsPage() {
     <div>
       <h1 className="font-display text-3xl">Refunds</h1>
       <p className="mt-2 text-sm text-ink-subtle">
-        Stripe refunds run automatically on Completed. JazzCash/manual need an
-        external reference before Completed. Cancelled paid orders and late
-        payments auto-queue here.
+        JazzCash and manual refunds need an external reference before they can be
+        marked Completed. Cancelled paid orders and late payments auto-queue here.
       </p>
+
+      {/* R6: search refunds by order number. */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); setPage(1); setQ(search.trim()); }}
+        className="mt-4 flex gap-2"
+      >
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by order number (e.g. ORD-…)"
+          maxLength={40}
+          className="w-full max-w-sm rounded-xl border border-line bg-card px-3 py-2 text-sm"
+          aria-label="Search refunds by order number"
+        />
+        <button type="submit" className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+          Search
+        </button>
+        {q && (
+          <button
+            type="button"
+            onClick={() => { setSearch(""); setQ(""); setPage(1); }}
+            className="rounded-xl px-3 py-2 text-sm font-medium text-ink-muted hover:text-ink"
+          >
+            Clear
+          </button>
+        )}
+      </form>
       {msg && (
         <p
           className={`mt-3 text-sm ${msgError ? "text-red-600" : "text-leaf-600"}`}

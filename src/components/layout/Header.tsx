@@ -60,7 +60,7 @@ export function Header({
   freeDeliveryThreshold?: number;
   ratePerKm?: number;
 } = {}) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const count = useCartStore((s) => s.count);
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -339,7 +339,8 @@ export function Header({
                   </>
                 )}
               </div>
-            ) : (
+            ) : status === "loading" ? null : (
+              // M-22: don't flash "Sign in" before the session is known.
               <Link
                 href="/login"
                 className="ml-1 hidden rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 sm:inline-flex"

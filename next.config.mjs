@@ -31,6 +31,14 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // M-16: the portals live at /store-portal and /rider-portal. Send the obvious
+  // wrong guesses there instead of showing a 404.
+  async redirects() {
+    return [
+      { source: "/rider", destination: "/rider-portal", permanent: false },
+      { source: "/store/orders", destination: "/store-portal/orders", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

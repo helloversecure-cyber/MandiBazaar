@@ -121,6 +121,25 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    // Keep every post-auth redirect (sign-in, sign-out, callbackUrl) on the
+    // canonical site host. Without this a wrong NEXTAUTH_URL (e.g. the Vercel
+    // preview address) makes logout land on that address (NEW-02). The real fix
+    // is still to set NEXTAUTH_URL=https://www.mandibazaar.pk, but this prevents
+    // users from being dropped on a different-looking copy of the site.
+    async redirect({ url, baseUrl }) {
+      const canonical = (process.env.NEXT_PUBLIC_APP_URL || baseUrl).replace(/\/+$/, "");
+      if (url.startsWith("/")) return `${canonical}${url}`;
+      try {
+        const u = new URL(url);
+        const c = new URL(canonical);
+        // Same host as canonical, or the configured baseUrl (e.g. the Vercel URL):
+        // rewrite onto the canonical host. Foreign hosts fall back to home (no open redirect).
+        if (u.host === c.host || url.startsWith(baseUrl)) return `${canonical}${u.pathname}${u.search}`;
+        return canonical;
+      } catch {
+        return canonical;
+      }
+    },
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;

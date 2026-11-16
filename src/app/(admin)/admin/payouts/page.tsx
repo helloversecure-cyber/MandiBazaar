@@ -43,6 +43,10 @@ type Remittance = {
 type Summary = {
   defaultCommissionPct: number;
   pendingCount: number;
+  settleableNet: number;
+  settleableGross: number;
+  settleableCommission: number;
+  settleableCount: number;
   totalGross: number;
   totalCommission: number;
   totalNet: number;
@@ -290,8 +294,8 @@ export default function AdminPayoutsPage() {
           <h1 className="text-3xl font-extrabold text-ink">Payouts &amp; remittances</h1>
           <p className="mt-1 max-w-xl text-sm text-ink-subtle">
             Stores are paid their delivered product sales minus the platform commission of{" "}
-            <strong>{rate}%</strong> (or the store&apos;s own rate if one is set). Delivery fees stay
-            with the platform. You always see a summary and confirm before anything is marked paid.
+            <strong>{rate}%</strong> (or the store&apos;s own rate if one is set). The rider keeps the
+            delivery fee. You always see a summary and confirm before anything is marked paid.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -314,10 +318,12 @@ export default function AdminPayoutsPage() {
 
       {summary && (
         <div className="mt-6 grid gap-3 sm:grid-cols-4">
-          <Stat label="Pending payouts" value={String(summary.pendingCount)} />
-          <Stat label="Gross sales" value={formatCurrency(summary.totalGross)} />
-          <Stat label={`Commission (${rate}%)`} value={formatCurrency(summary.totalCommission)} tone="amber" />
-          <Stat label="Net to stores" value={formatCurrency(summary.totalNet)} tone="emerald" />
+          {/* M-11: show what can be settled now (incl. not-yet-calculated), so the
+              cards aren't Rs 0 until "Calculate payouts" is clicked. */}
+          <Stat label="Ready to settle" value={String(summary.settleableCount)} />
+          <Stat label="Gross sales" value={formatCurrency(summary.settleableGross)} />
+          <Stat label={`Commission (${rate}%)`} value={formatCurrency(summary.settleableCommission)} tone="amber" />
+          <Stat label="Net to stores" value={formatCurrency(summary.settleableNet)} tone="emerald" />
         </div>
       )}
 

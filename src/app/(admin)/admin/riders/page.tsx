@@ -352,8 +352,8 @@ export default function AdminRidersPage() {
       </p>
       {canSeePay && payRule && (
         <p className="mt-1 text-xs text-ink-subtle">
-          Rider pay: {payRule} (change it in Settings). Pay is fixed when an order is delivered; failed and
-          returned deliveries are not paid.
+          Rider pay: {payRule}. The rider keeps the delivery fee they collect in cash; for fees paid
+          online, the platform pays that fee to the rider. Failed and returned deliveries are not paid.
         </p>
       )}
 
@@ -379,8 +379,8 @@ export default function AdminRidersPage() {
           Quick-add rider (starts as pending — approve it below after checking documents)
         </p>
         {input("name", { label: "Full name", placeholder: "Muhammad Ali", autoComplete: "off", maxLength: 60 })}
-        {input("phone", { label: "Mobile (login)", placeholder: "03001234567", inputMode: "tel", maxLength: 16 })}
-        {input("email", { label: "Email (optional)", type: "email", placeholder: "ali@gmail.com", maxLength: 100 })}
+        {input("phone", { label: "Mobile", placeholder: "03001234567", inputMode: "tel", maxLength: 16 })}
+        {input("email", { label: "Email (used to sign in)", type: "email", placeholder: "ali@gmail.com", maxLength: 100 })}
         {input("cnicNumber", { label: "CNIC", placeholder: "35202-1234567-1", inputMode: "numeric", maxLength: 15 })}
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-ink-muted">City</span>

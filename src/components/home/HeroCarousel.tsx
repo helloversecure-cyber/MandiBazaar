@@ -112,13 +112,15 @@ const HERO_MESH =
   "radial-gradient(at 70% 85%, rgba(245,158,11,0.32) 0px, transparent 50%)," +
   "radial-gradient(at 30% 80%, rgba(5,150,105,0.5) 0px, transparent 55%)";
 
+// M-26: open the category page (not a text search) so the pills match the real
+// kiryana categories. Used only when live categories aren't passed in.
 const FALLBACK_PILLS = [
-  { label: "Vegetables", href: "/products?q=vegetables" },
-  { label: "Fruits", href: "/products?q=fruits" },
-  { label: "Daal", href: "/products?q=daal" },
-  { label: "Rice", href: "/products?q=rice" },
-  { label: "Atta", href: "/products?q=atta" },
-  { label: "Dairy", href: "/products?q=dairy" },
+  { label: "Vegetables", href: "/products?category=vegetables" },
+  { label: "Fruits", href: "/products?category=fruits" },
+  { label: "Daal", href: "/products?category=daal-pulses" },
+  { label: "Rice", href: "/products?category=rice" },
+  { label: "Atta", href: "/products?category=atta-flour" },
+  { label: "Dairy", href: "/products?category=dairy-eggs" },
 ];
 
 /** Vibrant, immersive branded hero shown when there are no custom DB slides:

@@ -95,12 +95,10 @@ export function cashFeeToCollect(o: Pick<RevenueOrderInput, "deliveryFee" | "del
 export function summarizeRevenue(orders: RevenueOrderInput[]): RevenueSummary {
   let gross = 0;
   let discounts = 0;
-  let delivery = 0;
   let refunds = 0;
   let online = 0;
   let cash = 0;
   let toCollect = 0;
-  let cashFees = 0;
   let over = 0;
   const overOrders: string[] = [];
   let count = 0;
@@ -108,16 +106,17 @@ export function summarizeRevenue(orders: RevenueOrderInput[]): RevenueSummary {
   for (const o of orders) {
     if (!countsAsRevenue(o.orderStatus)) continue;
     count++;
-    const productBilled = Math.max(0, o.subtotal - o.discount);
-    const feeEarned = deliveryFeeEarned(o);
-    const feeToCollect = cashFeeToCollect(o);
-    const billed = r2(productBilled + feeEarned);
-    // What the order will bring in once the rider collects (full COD fee included)
-    const expected = r2(billed + feeToCollect);
+    const productBilled = r2(Math.max(0, o.subtotal - o.discount));
+    // NEW-01: "the rider keeps the delivery fee." It is NEVER platform revenue —
+    // collected in cash (the rider keeps that cash) or paid online (the platform
+    // forwards it to the rider). So the dashboard counts PRODUCT money only; the
+    // delivery fee is stripped out of both the online and the cash side.
+    const feePaid = deliveryFeeEarned(o); // delivery fee already paid = the rider's share
+    const onlineFee = o.deliveryFeePaymentStatus === "CASH_ON_DELIVERY" ? 0 : feePaid;
+    const cashFee = r2(Math.max(0, feePaid - onlineFee)); // delivery fee the rider collected in cash
 
     gross += o.subtotal;
     discounts += Math.min(o.discount, o.subtotal);
-    delivery += feeEarned;
     refunds += Math.max(0, o.refundsCompleted);
 
     const capturedOnline = o.payments
@@ -125,29 +124,34 @@ export function summarizeRevenue(orders: RevenueOrderInput[]): RevenueSummary {
       .reduce((s, p) => s + Math.max(0, p.amount), 0);
     const cashIn = Math.max(0, o.cashCollected);
 
-    const onlineCounted = Math.min(capturedOnline, billed);
-    const cashCounted = Math.min(cashIn, Math.max(0, billed - onlineCounted));
-    cashFees += feeToCollect;
-    const extra = r2(capturedOnline + cashIn - onlineCounted - cashCounted);
+    // Product money only (strip the rider's delivery fee from each side).
+    const onlineProduct = Math.max(0, capturedOnline - onlineFee);
+    const cashProduct = Math.max(0, cashIn - cashFee);
+
+    const onlineCounted = Math.min(onlineProduct, productBilled);
+    const cashCounted = Math.min(cashProduct, Math.max(0, productBilled - onlineCounted));
+    const extra = r2(onlineProduct + cashProduct - onlineCounted - cashCounted);
     if (extra > 0) {
       over += extra;
       overOrders.push(o.orderNumber || o.id);
     }
     online += onlineCounted;
     cash += cashCounted;
-    toCollect += Math.max(0, expected - onlineCounted - cashCounted);
+    toCollect += Math.max(0, productBilled - onlineCounted - cashCounted);
   }
 
   const grossProductSales = r2(gross);
   const discountsR = r2(discounts);
-  const deliveryRevenue = r2(delivery);
+  // The delivery fee belongs to the rider, so the platform books no delivery revenue.
+  const deliveryRevenue = 0;
   const refundsR = r2(refunds);
-  const netSales = r2(grossProductSales - discountsR + deliveryRevenue - refundsR);
+  const netSales = r2(grossProductSales - discountsR - refundsR);
   const onlinePayments = r2(online);
   const cashCollected = r2(cash);
   const moneyReceived = r2(onlinePayments + cashCollected);
   const codToCollect = r2(toCollect);
-  const cashFeesToCollect = r2(cashFees);
+  // The delivery fee isn't the platform's money, so nothing is "to collect" for it.
+  const cashFeesToCollect = 0;
   return {
     orderCount: count,
     grossProductSales,
