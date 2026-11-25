@@ -26,6 +26,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
 .env*.local
 
 # IDE
@@ -53,4 +54,3 @@ temp_interactive_push.bat
 
 # Claude Code local config
 .claude/
-config.bat
