@@ -17,6 +17,7 @@ import {
   LogOut,
   Package,
   LayoutGrid,
+  ClipboardList,
 } from "lucide-react";
 import {
   refreshCartDeliveryProgress,
@@ -25,6 +26,7 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useListBidding } from "@/components/lists/useListBidding";
 
 /** Shopper menu — each entry once (QA A2 / J2). Store owners use "Sell on MandiBazaar". */
 const SHOP_LINKS = [
@@ -62,6 +64,8 @@ export function Header({
 } = {}) {
   const { data: session, status } = useSession();
   const count = useCartStore((s) => s.count);
+  // W12: "Send a list" only when list bidding is on for this person (beta testers too).
+  const listsOn = useListBidding();
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -321,6 +325,15 @@ export function Header({
                       >
                         My orders
                       </Link>
+                      {listsOn && (
+                        <Link
+                          href="/account/lists"
+                          className="block px-4 py-2.5 text-sm hover:bg-app"
+                          onClick={() => setAccountOpen(false)}
+                        >
+                          My lists
+                        </Link>
+                      )}
                       <Link
                         href="/wishlist"
                         className="block px-4 py-2.5 text-sm hover:bg-app"
@@ -368,6 +381,15 @@ export function Header({
                 {c.label}
               </Link>
             ))}
+            {listsOn && (
+              <Link
+                href="/lists/new"
+                className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-card"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Send a list
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -419,6 +441,15 @@ export function Header({
                   {c.label}
                 </Link>
               ))}
+              {listsOn && (
+                <Link
+                  href="/lists/new"
+                  className="rounded-lg px-3 py-2.5 text-sm font-semibold text-brand-700 hover:bg-app"
+                  onClick={() => setOpen(false)}
+                >
+                  Send a list to stores
+                </Link>
+              )}
             </div>
             {!session?.user && (
               <>
@@ -462,6 +493,11 @@ export function Header({
               <Link href="/account/orders" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm hover:bg-app">
                 Orders
               </Link>
+              {session?.user && listsOn && (
+                <Link href="/account/lists" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm hover:bg-app">
+                  My lists
+                </Link>
+              )}
               <Link href="/wishlist" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm hover:bg-app">
                 Wishlist
               </Link>

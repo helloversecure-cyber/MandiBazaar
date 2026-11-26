@@ -8,6 +8,7 @@ import {
 } from "@/components/home/HeroCarousel";
 import { CategoryScroll } from "@/components/home/CategoryScroll";
 import { ServiceBar } from "@/components/home/ServiceBar";
+import { SendListCard } from "@/components/lists/ListBits";
 import { ProductScrollRail, ProductGridSection } from "@/components/home/ProductRails";
 import {
   PromoBannerGrid,
@@ -393,6 +394,8 @@ export default async function HomePage() {
         freeDeliveryThreshold={claims.site.freeDeliveryThreshold}
         supportLine={claims.supportLine}
       />
+      {/* W12: hidden unless list bidding is on for this visitor */}
+      <SendListCard className="mt-6" />
 
       {!hasAnyProduct && (
         <section className="mx-auto max-w-7xl px-3 py-12 text-center lg:px-4">

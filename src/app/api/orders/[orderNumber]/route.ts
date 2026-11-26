@@ -52,6 +52,8 @@ export async function GET(
         cashCollection: true,
         delivery: true,
         customer: { select: { fullName: true, phone: true, email: true } },
+        // W12: list orders show rider bidding after packing on the customer's order page.
+        itemList: { select: { id: true } },
       },
     });
 
