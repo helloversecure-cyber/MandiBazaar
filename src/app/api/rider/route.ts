@@ -336,9 +336,11 @@ export async function PATCH(req: Request) {
       if (!["AVAILABLE", "BUSY", "OFFLINE"].includes(status)) {
         return apiError("Invalid rider status", 400);
       }
+      // Only the status fields: the full row holds CNIC, payout numbers and documents.
       const updated = await prisma.rider.update({
         where: { id: rider.id },
         data: { status },
+        select: { id: true, status: true, isActive: true, approvalStatus: true },
       });
       return apiSuccess(updated);
     }
