@@ -91,6 +91,8 @@ export async function deliverNotification(input: NotifyInput) {
       where: { id: notification.id },
       data: { status: NotificationStatus.SENT, sentAt: new Date() },
     });
+    // Also wake the Android app, if this user has one signed in (best effort).
+    if (input.userId) await pushInAppCopy(input.userId, notification.id, input);
     return { notification, sent: true };
   }
 
@@ -499,5 +501,28 @@ export async function notifySuperAdminsInApp(params: {
   } catch (e) {
     console.error("[notify] super admin notification failed", e);
     return 0;
+  }
+}
+
+/** Push a copy of an in-app notification to the user's phones; never throws, gives up after 4 s. */
+async function pushInAppCopy(userId: string, notificationId: string, input: NotifyInput) {
+  try {
+    const { pushToUser } = await import("@/lib/notifications/push");
+    const data: Record<string, string> = { type: input.type, notificationId };
+    for (const [k, v] of Object.entries(input.metadata || {})) {
+      if (typeof v === "string" || typeof v === "number") data[k] = String(v);
+    }
+    if (input.orderId) data.orderId = input.orderId;
+    await Promise.race([
+      pushToUser(userId, {
+        // Secrets (reset codes etc.) never go to a lock screen.
+        title: input.title,
+        body: input.sensitive ? "Open MandiBazaar to view this message." : input.body,
+        data,
+      }),
+      new Promise((resolve) => setTimeout(resolve, 4000)),
+    ]);
+  } catch (e) {
+    console.error("[notify:push]", e instanceof Error ? e.message : e);
   }
 }

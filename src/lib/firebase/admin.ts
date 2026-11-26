@@ -41,6 +41,11 @@ function auth() {
   return getAuth(adminApp());
 }
 
+/** The Firebase Admin app (Auth and Cloud Messaging share the service account). */
+export function firebaseAdminApp(): App {
+  return adminApp();
+}
+
 // ---------------------------------------------------------------------------
 // User management
 // ---------------------------------------------------------------------------
