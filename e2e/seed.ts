@@ -30,6 +30,12 @@ async function main() {
       },
     });
   }
+  // One throwaway customer per width for the account-deletion browser test.
+  for (const w of [360, 390, 768, 1024, 1280, 1440]) {
+    await prisma.user.create({
+      data: { fullName: `Delete Me ${w}`, email: `delete.w${w}@test.local`, roleId: f.customerA.roleId, emailVerified: new Date() },
+    });
+  }
   // One delivered order so /account/orders and its detail page have content.
   const atta = await prisma.product.findUniqueOrThrow({
     where: { storeId_slug: { storeId: f.S1.id, slug: "atta-10kg" } },

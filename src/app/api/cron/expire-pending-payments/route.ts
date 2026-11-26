@@ -25,7 +25,14 @@ export async function GET(req: NextRequest) {
       return apiError("Unauthorized", 401);
     }
     const result = await expirePendingPayments({ limit: 50, maxOrders: 1000 });
-    return apiSuccess(result);
+    // Daily backstop for item lists (best effort; never fails this job).
+    const lists = await import("@/lib/lists/broadcast")
+      .then((m) => m.tickDueLists({ limit: 500 }))
+      .catch((e) => {
+        console.error("[cron] lists tick", e);
+        return null;
+      });
+    return apiSuccess({ ...result, lists });
   } catch (e) {
     console.error("[cron/expire-pending-payments]", e);
     return apiError("Expire job failed", 500);
