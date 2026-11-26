@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  malware-scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Scan for the Nov 2026 repo malware pattern
+        run: bash scripts/malware-scan.sh
+
+  test:
+    needs: malware-scan
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mb
+          POSTGRES_PASSWORD: mb
+          POSTGRES_DB: mandibazaar_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://mb:mb@localhost:5432/mandibazaar_test
+      TEST_DATABASE_URL: postgresql://mb:mb@localhost:5432/mandibazaar_test
+      NEXTAUTH_SECRET: ci-only-secret-not-used-anywhere-else
+      NEXTAUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # --ignore-scripts: never run install hooks from dependencies in CI
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Unit and API tests
+        run: npx vitest run
+      - name: Build
+        run: npx next build
+      - name: Browser tests (6 widths)
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e-report/
+            test-results/
+          retention-days: 7

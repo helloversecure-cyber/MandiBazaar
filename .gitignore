@@ -54,3 +54,8 @@ temp_interactive_push.bat
 
 # Claude Code local config
 .claude/
+
+# Playwright
+/e2e-report/
+/test-results/
+/playwright/.cache/
