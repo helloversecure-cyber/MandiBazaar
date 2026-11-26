@@ -13,9 +13,15 @@ import { parseIdentifier, phoneLiteralVariants } from "@/lib/auth/identifier";
 import { isPlatformAdminRole, isRiderRole, isStorePortalRole } from "@/lib/auth/permissions";
 import {
   createFirebaseUser,
+  firebaseAuthEnabled,
   getFirebaseUserByEmail,
   verifyFirebasePassword,
 } from "@/lib/firebase/admin";
+
+/** True only for `next dev` / tests on a machine with no Firebase credentials. */
+export function localDevWithoutFirebase(): boolean {
+  return process.env.NODE_ENV !== "production" && !firebaseAuthEnabled();
+}
 
 export const EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED";
 
@@ -111,7 +117,7 @@ export async function verifyPasswordWithLockout(
     throw new Error(lockedMessage(mins));
   }
 
-  const fbUser = await getFirebaseUserByEmail(email);
+  const fbUser = localDevWithoutFirebase() ? null : await getFirebaseUserByEmail(email);
 
   if (fbUser) {
     const check = await verifyFirebasePassword(email, password);
@@ -138,6 +144,10 @@ export async function verifyPasswordWithLockout(
     if (r.locked) throw new Error(lockedMessage(LOCK_MINUTES));
     throw new Error("Invalid credentials");
   }
+  // Local development without Firebase configured (never in production): the
+  // bcrypt password alone signs in, so the site and the Android app can be
+  // tested against a local database.
+  if (localDevWithoutFirebase()) return user;
   // Grandfather existing users: create a verified Firebase account with this password.
   const created = await createFirebaseUser({ email, password, emailVerified: true, displayName: user.fullName });
   await prisma.user.update({

@@ -54,6 +54,8 @@ export default defineConfig({
       NEXTAUTH_URL: BASE_URL,
       NEXT_PUBLIC_APP_URL: BASE_URL,
       NEXT_TELEMETRY_DISABLED: "1",
+      // Customer A may use list bidding while the public switch is off (beta path).
+      LIST_BIDDING_BETA_EMAILS: "customer.a@test.local",
     },
   },
 });
