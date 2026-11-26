@@ -12,6 +12,7 @@ export function listErrorResponse(e: unknown, logTag: string): Response {
   const msg = e instanceof Error ? e.message : "";
   if (msg === "UNAUTHORIZED") return apiError("Please sign in", 401);
   if (msg === "FORBIDDEN") return apiError("Not allowed", 403);
+  if (msg === "STORE_NOT_APPROVED") return apiError("Your store isn't approved yet.", 403, "STORE_NOT_APPROVED");
   console.error(`[${logTag}]`, e);
   return apiError("Something went wrong. Please try again in a few moments.", 500);
 }
