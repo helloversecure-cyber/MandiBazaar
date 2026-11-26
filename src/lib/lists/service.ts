@@ -10,6 +10,7 @@ import { sendNotification } from "@/lib/notifications/service";
 import { getListSettings, listBiddingAllowedFor } from "@/lib/lists/settings";
 import type { CreateListInput, ListLineInput, UpdateListInput } from "@/lib/lists/validation";
 import { broadcastNewList, tickList } from "@/lib/lists/broadcast";
+import { offersForList } from "@/lib/lists/offers";
 
 export const MAX_LISTS_PER_HOUR = 10;
 
@@ -170,7 +171,9 @@ export async function getCustomerList(actor: Actor, id: string) {
   // C-09: widen / expire on read when due (no always-on scheduler).
   await tickList(id).catch((e) => console.error("[lists] tick", e));
   const row = await prisma.itemList.findUniqueOrThrow({ where: { id }, include: listInclude });
-  return serializeList(await expireIfDue(row));
+  const list = serializeList(await expireIfDue(row));
+  // E-01: the store offers on this list (owner only; withdrawn offers hidden).
+  return { ...list, offers: await offersForList(id) };
 }
 
 export async function listCustomerLists(actor: Actor, opts: { skip: number; take: number }) {
