@@ -142,6 +142,12 @@ export default function AddressesPage() {
         return;
       }
       toast.success(editingId ? "Address updated" : "Address saved");
+      // W12: "+ Add a new address" from the send-list page comes back there (internal paths only).
+      const back = new URLSearchParams(window.location.search).get("returnTo");
+      if (!editingId && back && /^\/(?!\/)/.test(back)) {
+        window.location.assign(back);
+        return;
+      }
       setEditingId(null);
       setForm(emptyForm);
       fe.clear();

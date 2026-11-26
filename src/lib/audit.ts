@@ -1,5 +1,10 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
+/**
+ * Inside `prisma.$transaction` pass the transaction client as `db`, so the audit
+ * row does not need a second pool connection while the transaction holds one.
+ */
 export async function writeAuditLog(opts: {
   userId?: string | null;
   action: string;
@@ -9,8 +14,8 @@ export async function writeAuditLog(opts: {
   newValue?: unknown;
   ipAddress?: string;
   userAgent?: string;
-}) {
-  return prisma.auditLog.create({
+}, db: Prisma.TransactionClient | typeof prisma = prisma) {
+  return db.auditLog.create({
     data: {
       userId: opts.userId || null,
       action: opts.action,

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { DownloadInvoiceButton } from "@/components/orders/DownloadInvoiceButton";
 import { OrderTimeline, type JourneyStep } from "@/components/orders/OrderTimeline";
 import { useConfirm } from "@/components/ui/feedback";
+import { RiderBidsSection } from "@/components/lists/RiderBidsSection";
 import { Star } from "lucide-react";
 
 const CANCELABLE = new Set([
@@ -19,6 +20,8 @@ const CANCELABLE = new Set([
 
 type OrderItem = {
   productId: string | null;
+  storeId?: string;
+  storeName?: string;
   productName: string;
   quantity: number;
   unit: string;
@@ -54,6 +57,12 @@ type Order = {
   refunds?: { id: string; amount: number; status: string; reason: string }[];
   statusTimeline?: JourneyStep[];
   paymentProofs?: { id: string; status: string; reviewNotes?: string | null }[];
+  /** Set when the order came from an accepted item list (W7): rider bidding after packing. */
+  itemList?: { id: string } | null;
+  /** W9: 4-digit code for the rider (item-list orders) */
+  deliveryCode?: { required: boolean; code: string | null; used: boolean; lockedUntil: string | null } | null;
+  /** W9: the customer's rating of the store on this order */
+  storeReview?: { rating: number; comment: string | null; storeName: string | null } | null;
 };
 
 export default function OrderDetailPage() {
@@ -71,21 +80,64 @@ export default function OrderDetailPage() {
   const confirmDialog = useConfirm();
   const [refundReason, setRefundReason] = useState("");
   const [showRefund, setShowRefund] = useState(false);
+  const [storeRating, setStoreRating] = useState<{ rating: number; comment: string; storeId: string }>({
+    rating: 0,
+    comment: "",
+    storeId: "",
+  });
   const [reviews, setReviews] = useState<
     Record<string, { rating: number; comment: string; submitted?: boolean }>
   >({});
 
-  const load = useCallback(() => {
-    fetch(`/api/orders/${params.orderNumber}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success) setOrder(d.data);
-      });
+  /** First load failed (no order to show yet): show why with a retry instead of "Loading…" forever. */
+  const [loadError, setLoadError] = useState<{ status: number; message: string } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/orders/${params.orderNumber}`, { cache: "no-store" });
+      const d = await res.json().catch(() => null);
+      if (!d?.success) {
+        // A failed refresh keeps the order already on screen.
+        setLoadError({ status: res.status, message: d?.error || "Couldn't load this order." });
+        return;
+      }
+      setLoadError(null);
+      setOrder(d.data);
+    } catch {
+      setLoadError({ status: 0, message: "Couldn't load this order. Check your connection and try again." });
+    }
   }, [params.orderNumber]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  async function submitStoreRating(defaultStoreId: string | undefined) {
+    if (!storeRating.rating) {
+      setMsg("Please pick 1 to 5 stars for the store", true);
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    const res = await fetch("/api/store-reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: order!.id,
+        rating: storeRating.rating,
+        comment: storeRating.comment || undefined,
+        storeId: storeRating.storeId || defaultStoreId || undefined,
+      }),
+    });
+    const data = await res.json();
+    setBusy(false);
+    if (!data.success) {
+      setMsg(data.error || "Could not save your rating", true);
+      return;
+    }
+    setMsg("Thanks for rating the store");
+    load();
+  }
 
   // Mark items already reviewed on THIS order so they show a "submitted" state
   // instead of a blank form that would 409 on re-submit.
@@ -121,7 +173,11 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const notice = new URLSearchParams(window.location.search).get("notice");
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("from") === "list") {
+      setMsg("Order placed. The store is preparing it; you'll choose a delivery rider here once it's packed.");
+    }
+    const notice = qs.get("notice");
     if (notice === "payment_review") {
       setMsg(
         "Payment arrived after this order closed. A refund has been queued — MandiBazaar will process it."
@@ -129,6 +185,32 @@ export default function OrderDetailPage() {
     }
   }, []);
 
+  if (!order && loadError) {
+    const notFound = loadError.status === 404;
+    return (
+      <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-card px-6 py-16 text-center">
+        <h2 className="text-xl font-bold text-ink">{notFound ? "Order not found" : "Couldn't load this order"}</h2>
+        <p className="mt-2 max-w-sm text-sm text-ink-subtle">
+          {notFound ? "It may belong to another account." : loadError.message}
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {!notFound && (
+            <Button
+              onClick={() => {
+                setLoadError(null);
+                load();
+              }}
+            >
+              Try again
+            </Button>
+          )}
+          <Button href="/account/orders" variant="outline">
+            My orders
+          </Button>
+        </div>
+      </div>
+    );
+  }
   if (!order) {
     return <div className="py-16 text-center text-sm text-ink-subtle">Loading order…</div>;
   }
@@ -138,6 +220,9 @@ export default function OrderDetailPage() {
   const refundable = order.refundableAmount ?? 0;
   const isCancelled = order.orderStatus === "CANCELLED";
   const isDelivered = order.orderStatus === "DELIVERED";
+  const isListOrder = !!order.itemList;
+  // List orders: the delivery fee comes from the rider the customer chooses after packing.
+  const feePending = isListOrder && !order.rider && (order.deliveryFee || 0) <= 0;
   // JazzCash-QR receipt state: a submitted receipt keeps the order PENDING_PAYMENT
   // until an admin verifies, so surface it instead of a generic "pay again" prompt.
   const awaitingPayment = order.orderStatus === "PENDING_PAYMENT";
@@ -357,7 +442,9 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {order.rider && (
+      {isListOrder && !isCancelled && <RiderBidsSection orderNumber={order.orderNumber} onAssigned={load} />}
+
+      {order.rider && !isListOrder && (
         <div className="mb-6 rounded-2xl border border-line bg-card p-5 shadow-card text-sm">
           <h2 className="font-bold text-ink">Assigned rider</h2>
           <p className="mt-2 text-ink-muted">
@@ -370,6 +457,101 @@ export default function OrderDetailPage() {
           </p>
         </div>
       )}
+
+      {order.deliveryCode?.code && (
+        <div className="mb-6 rounded-2xl border border-brand-200 bg-card p-5 shadow-card text-sm">
+          <h2 className="font-bold text-ink">Delivery code</h2>
+          <p className="mt-2 font-mono text-3xl font-bold tracking-[0.4em] text-ink">
+            {order.deliveryCode.code}
+          </p>
+          <p className="mt-2 text-xs text-ink-subtle">
+            Give this code to the rider only when you have your order in hand. MandiBazaar staff
+            will never ask for it.
+          </p>
+          {order.deliveryCode.lockedUntil && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+              Too many wrong codes were entered. The code is paused until{" "}
+              {new Date(order.deliveryCode.lockedUntil).toLocaleTimeString()}. Call MandiBazaar
+              support if you need help.
+            </p>
+          )}
+        </div>
+      )}
+
+      {order.orderStatus === "DELIVERED" &&
+        (() => {
+          const stores = Array.from(
+            new Map(
+              order.items.filter((i) => i.storeId).map((i) => [i.storeId!, i.storeName || "Store"])
+            ).entries()
+          );
+          if (order.storeReview) {
+            return (
+              <div className="mb-6 rounded-2xl border border-line bg-card p-5 shadow-card text-sm">
+                <h2 className="font-bold text-ink">Your store rating</h2>
+                <p className="mt-2 text-ink-muted">
+                  {order.storeReview.storeName ? `${order.storeReview.storeName} · ` : ""}
+                  {order.storeReview.rating} / 5
+                  {order.storeReview.comment ? ` — ${order.storeReview.comment}` : ""}
+                </p>
+              </div>
+            );
+          }
+          if (!stores.length) return null;
+          return (
+            <div className="mb-6 rounded-2xl border border-line bg-card p-5 shadow-card text-sm">
+              <h2 className="font-bold text-ink">Rate the store</h2>
+              {stores.length > 1 && (
+                <select
+                  className="mt-3 w-full rounded-xl border border-line bg-app px-3 py-2 text-sm"
+                  value={storeRating.storeId}
+                  onChange={(e) => setStoreRating((p) => ({ ...p, storeId: e.target.value }))}
+                >
+                  <option value="">Choose the store</option>
+                  {stores.map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="mt-3 flex gap-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setStoreRating((p) => ({ ...p, rating: n }))}
+                    className="p-0.5"
+                    aria-label={`${n} stars`}
+                  >
+                    <Star
+                      className={cn(
+                        "h-6 w-6",
+                        n <= storeRating.rating ? "fill-amber-400 text-amber-400" : "text-slate-300"
+                      )}
+                    />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                className="mt-3 w-full rounded-xl border border-line bg-app px-4 py-3 text-sm outline-none focus:border-brand-400 focus:bg-card focus:ring-2 focus:ring-brand-100"
+                placeholder="How was the store? (optional)"
+                maxLength={1000}
+                value={storeRating.comment}
+                onChange={(e) => setStoreRating((p) => ({ ...p, comment: e.target.value }))}
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="mt-3"
+                disabled={busy || (stores.length > 1 && !storeRating.storeId)}
+                onClick={() => submitStoreRating(stores.length === 1 ? stores[0][0] : undefined)}
+              >
+                Submit store rating
+              </Button>
+            </div>
+          );
+        })()}
 
       <div className="mb-6 flex flex-wrap gap-2">
         <DownloadInvoiceButton
@@ -460,7 +642,7 @@ export default function OrderDetailPage() {
       <div className="rounded-2xl border border-line bg-card p-5 shadow-card space-y-3 text-sm">
         <Row label="Product subtotal" value={formatCurrency(order.subtotal)} />
         <Row label="Discount" value={`-${formatCurrency(order.discount)}`} />
-        <Row label="Delivery fee" value={formatCurrency(order.deliveryFee)} />
+        <Row label="Delivery fee" value={feePending ? "Set by rider bidding" : formatCurrency(order.deliveryFee)} />
         <Row
           label={
             order.fullCod && (order.deliveryFeePaid || 0) <= 0

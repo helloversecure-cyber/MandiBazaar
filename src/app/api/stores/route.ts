@@ -13,6 +13,7 @@ import {
   storeImpact,
   storeOptions,
 } from "@/lib/catalog/admin-stores";
+import { ratingOf, storeRatings } from "@/lib/stores/reviews";
 
 /**
  * Fields safe to return to anyone (logged out included). Never add owner contact,
@@ -84,7 +85,8 @@ export async function GET(req: NextRequest) {
         select: PUBLIC_STORE_SELECT,
       });
       if (!store) return apiError("Store not found", 404);
-      return apiSuccess(store);
+      // W9: customers' store rating (average of 1-5 stars, one per delivered order)
+      return apiSuccess({ ...store, rating: ratingOf(await storeRatings([store.id]), store.id) });
     }
 
     if (mine) {
@@ -142,9 +144,10 @@ export async function GET(req: NextRequest) {
           })
         : prisma.store.findMany({ ...listArgs, select: PUBLIC_STORE_SELECT }),
     ]);
+    const ratings = await storeRatings(items.map((s) => s.id));
 
     return apiSuccess({
-      items,
+      items: items.map((s) => ({ ...s, rating: ratingOf(ratings, s.id) })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (e) {

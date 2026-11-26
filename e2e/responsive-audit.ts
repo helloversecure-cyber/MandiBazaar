@@ -68,9 +68,10 @@ export async function openPage(page: Page, path: string) {
   // Client data (cart quote, session) and fonts settle the layout. `next dev` keeps an
   // HMR socket open, so don't wait for a fully idle network.
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => {});
-  // Pages that fetch on the client show "Loading…" first; a cold `next dev` (CI) can
-  // take several seconds, so wait for the real content before measuring.
-  await expect(page.getByText(/^Loading…$/)).toHaveCount(0, { timeout: 30_000 });
+  // Pages that fetch on the client show "Loading…" / "Loading order…" / "Loading list…"
+  // first; a cold `next dev` (CI) can take several seconds, so wait for the real content
+  // before measuring.
+  await expect(page.getByText(/^Loading( [\w ]+)?…$/)).toHaveCount(0, { timeout: 45_000 });
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => {});
   await page.evaluate(() => document.fonts.ready);
 }

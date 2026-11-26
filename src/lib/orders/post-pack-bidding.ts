@@ -37,6 +37,7 @@ import { BiddingError, MAX_BID_AMOUNT, RIDER_INELIGIBLE_MESSAGES, type DeliveryS
 import { haversineKm } from "@/lib/orders/delivery-fee";
 import { syncFulfillmentsToOrderStatus } from "@/lib/orders/fulfillment-sync";
 import { recordStatusEvent } from "@/lib/orders/status-events";
+import { customerDeliveryCodeView, issueDeliveryCodeOnAssign, sendDeliveryCodeToCustomer } from "@/lib/orders/delivery-code";
 import { ELIGIBLE_RIDER_WHERE, riderBidEligibility, riderHasActiveDelivery } from "@/lib/riders/eligibility";
 import { formatCurrency } from "@/lib/utils";
 
@@ -166,7 +167,7 @@ export async function openPostPackRequest(tx: Tx, orderId: string): Promise<Open
     pickupPoint,
   };
 
-  const s = await getListSettings();
+  const s = await getListSettings(tx);
   const created = await tx.deliveryRequest.createMany({
     data: [
       {
@@ -296,7 +297,7 @@ async function assertRiderMayBid(tx: Db, riderId: string, req: { summary: Prisma
     where: { id: riderId },
     select: { city: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true },
   });
-  const s = await getListSettings();
+  const s = await getListSettings(tx);
   if (!rider || !riderNearPickup(rider, pickupOf(req), postPackRadiusKm(s.postPackRiderRadiusKm, req.reopenCount)).near) {
     throw new BiddingError("TOO_FAR", "This delivery is too far from you.", 403);
   }
@@ -510,6 +511,8 @@ export type AcceptRiderBidResult = {
   remainingAmount: number;
   deliveryFeePaymentStatus: string;
   rider: { name: string; phone: string; vehicleType: string };
+  /** W9: the 4-digit code the customer gives the rider at the door. */
+  deliveryCode: string | null;
 };
 
 /**
@@ -613,11 +616,14 @@ export async function acceptPostPackBid(
         note: `Accepted ${bid.rider.name}'s delivery bid of Rs ${fee}`,
       });
       await recordRiderEarningLedger(tx, { orderId: order.id, riderId: bid.riderId, amount: fee, refId: bid.id });
+      // W9: the customer's 4-digit delivery code (only its keyed hash is stored).
+      const newCode = await issueDeliveryCodeOnAssign(tx, order.id);
 
       return {
         kind: "accepted" as const,
         bid,
         fee,
+        newCode,
         loserUserIds: losers.map((l) => l.rider.userId).filter((v): v is string => !!v),
         previousFee: Number(o.deliveryFee),
       };
@@ -654,8 +660,10 @@ export async function acceptPostPackBid(
     remainingAmount: Number(fresh.remainingAmount),
     deliveryFeePaymentStatus: fresh.deliveryFeePaymentStatus,
     rider: { name: out.bid.rider.name, phone: out.bid.rider.phone, vehicleType: out.bid.rider.vehicleType },
+    deliveryCode: (await customerDeliveryCodeView(order.id))?.code ?? null,
   };
   if (out.kind === "reused") return result;
+  if (out.newCode) await sendDeliveryCodeToCustomer(order.id, out.newCode);
 
   await writeAuditLog({
     userId: actor.id,

@@ -1,6 +1,13 @@
 import { NextRequest } from "next/server";
 import { closePostPackRequest } from "@/lib/orders/post-pack-bidding";
 import { getSession, requireAdmin } from "@/lib/auth/auth";
+import {
+  DeliveryCodeError,
+  auditAdminDeliveryOverride,
+  issueDeliveryCodeOnAssign,
+  resetDeliveryCodeByAdmin,
+  sendDeliveryCodeToCustomer,
+} from "@/lib/orders/delivery-code";
 import { prisma } from "@/lib/db";
 import {
   ORDER_STATUS_LABELS,
@@ -622,6 +629,21 @@ export async function PATCH(req: Request) {
     });
     if (!order) return apiError("Order not found", 404);
 
+    // --- W9: new delivery code (customer lost it / no phone / code locked) ---
+    if (body.action === "RESET_DELIVERY_CODE") {
+      try {
+        const r = await resetDeliveryCodeByAdmin(session.user.id, order.id);
+        return apiSuccess({
+          message: `New delivery code for ${r.orderNumber}: ${r.code}. It was sent to the customer; read it out only to the customer.`,
+          orderNumber: r.orderNumber,
+          deliveryCode: r.code,
+        });
+      } catch (e) {
+        if (e instanceof DeliveryCodeError) return apiError(e.message, e.status, e.code);
+        throw e;
+      }
+    }
+
     // --- Record COD cash (admin) -------------------------------------------
     if (collectCash) {
       const remaining = toNumber(order.remainingAmount);
@@ -785,7 +807,7 @@ export async function PATCH(req: Request) {
         return apiError("This rider is already assigned", 400);
       }
 
-      await prisma.$transaction(async (tx) => {
+      const newCode = await prisma.$transaction(async (tx) => {
         await tx.order.update({
           where: { id: order.id },
           data: { orderStatus: OrderStatus.ASSIGNED_TO_RIDER, riderId: rid },
@@ -798,7 +820,10 @@ export async function PATCH(req: Request) {
         await syncFulfillmentsToOrderStatus(tx, order.id, OrderStatus.ASSIGNED_TO_RIDER);
         // Item-list orders: a manual assignment closes any open rider bidding (G-15).
         await closePostPackRequest(tx, order.id);
+        // W9: item-list orders get the customer's delivery code (kept on a re-assign).
+        return issueDeliveryCodeOnAssign(tx, order.id);
       });
+      if (newCode) await sendDeliveryCodeToCustomer(order.id, newCode);
 
       const addr = order.deliveryAddressSnapshot as {
         houseBuilding?: string;
@@ -958,6 +983,8 @@ export async function PATCH(req: Request) {
         }
         // Ask the customer to confirm receipt once an admin marks it delivered.
         if (to === "DELIVERED") {
+          // W9: an admin delivering a code-protected order is the override path.
+          await auditAdminDeliveryOverride(session.user.id, order.id, reason);
           await sendDeliveryConfirmationRequest(order.id);
         }
         // A returned order refunds any money already paid (same as cancel). No-op

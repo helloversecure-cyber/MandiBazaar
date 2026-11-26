@@ -14,7 +14,7 @@ async function main() {
   if (process.argv.includes("--cookie")) {
     const cookie = await encode({
       secret: process.env.NEXTAUTH_SECRET!,
-      token: { sub: u.id, id: u.id, role: u.role.name, phone: u.phone, mustChangePassword: false, storeApproved: true },
+      token: { name: u.fullName, email: u.email, sub: u.id, id: u.id, role: u.role.name, phone: u.phone, mustChangePassword: false, storeApproved: true },
     });
     process.stdout.write(cookie);
     return;

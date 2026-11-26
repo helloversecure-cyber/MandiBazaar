@@ -25,6 +25,7 @@ import {
   type CouponState,
 } from "@/components/checkout/CouponBox";
 import { useToast } from "@/components/ui/feedback";
+import { useListBidding } from "@/components/lists/useListBidding";
 
 type CartItem = {
   id: string;
@@ -104,6 +105,7 @@ function canIncrease(item: CartItem) {
 export default function CartPage() {
   const { status } = useSession();
   const toast = useToast();
+  const listsOn = useListBidding();
   const [items, setItems] = useState<CartItem[]>([]);
   const [quote, setQuote] = useState<Quote>(EMPTY_QUOTE);
   const [loading, setLoading] = useState(true);
@@ -513,6 +515,17 @@ export default function CartPage() {
             >
               Continue shopping
             </Link>
+            {listsOn && !isGuest && (
+              <div className="mt-4 rounded-xl border border-dashed border-brand-200 p-3 text-center text-xs text-ink-muted">
+                <p>Need items that aren&apos;t in the catalogue?</p>
+                <Link
+                  href="/lists/new?from=cart"
+                  className="mt-1 inline-flex items-center justify-center font-semibold text-brand-700 hover:underline max-md:min-h-[44px]"
+                >
+                  + Add custom items and let stores bid
+                </Link>
+              </div>
+            )}
           </div>
         </aside>
         {/* L-03: below lg the summary sits under the items, so keep the total and the
