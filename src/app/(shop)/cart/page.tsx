@@ -315,7 +315,7 @@ export default function CartPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px] lg:gap-8">
         <div className="space-y-3">
           {items.map((item) => {
             const problem =
@@ -515,6 +515,29 @@ export default function CartPage() {
             </Link>
           </div>
         </aside>
+        {/* L-03: below lg the summary sits under the items, so keep the total and the
+            main button stuck above the bottom nav all the way down to the summary. */}
+        <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center justify-between gap-3 rounded-2xl border border-line bg-card p-3 shadow-card lg:hidden">
+          <div className="min-w-0">
+            <p className="text-xs text-ink-muted">
+              {quote.deliveryKnown || quote.isFreeDelivery ? "Total" : "Total before delivery"}
+            </p>
+            <p className="font-bold text-ink">{formatCurrency(quote.total)}</p>
+          </div>
+          {isGuest ? (
+            <Button href="/login?callbackUrl=/checkout" className="shrink-0 px-4">
+              Sign in to checkout
+            </Button>
+          ) : (
+            <Button
+              href={quote.canCheckout ? "/checkout" : undefined}
+              disabled={!quote.canCheckout}
+              className="shrink-0 px-4"
+            >
+              Proceed to checkout
+            </Button>
+          )}
+        </div>
       </div>
     </ShopContainer>
   );
