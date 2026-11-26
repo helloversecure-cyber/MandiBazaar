@@ -19,6 +19,8 @@ export const MAX_UNIT_PRICE = 1_000_000;
 
 export const bidSchema = z.object({
   storeId: z.string().min(1).max(40).optional(),
+  /** The list version the store was looking at; refused with LIST_CHANGED if the customer edited it since. */
+  listVersion: z.coerce.number().int().min(1).optional().nullable(),
   lines: z
     .array(
       z.object({
@@ -49,6 +51,17 @@ export type BidInput = z.infer<typeof bidSchema>;
 type Actor = { id: string };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Line order shared by the detail endpoint and bid validation, so `lines.N.*` errors match what the store sees. */
+const LINE_ORDER: Prisma.ItemListLineOrderByWithRelationInput[] = [{ sortOrder: "asc" }, { id: "asc" }];
+
+type ListOrderRef = { acceptedBidId: string | null; order: { id: string; orderNumber: string } | null };
+
+/** The order created from this bid — only when this store's bid won. */
+function wonOrder(bid: { id: string; status: string } | null, list: ListOrderRef) {
+  if (!bid || bid.status !== "ACCEPTED" || list.acceptedBidId !== bid.id || !list.order) return null;
+  return { orderId: list.order.id, orderNumber: list.order.orderNumber };
+}
 
 /** Store ids this user may bid for: owner, or an active OWNER/MANAGER member of an approved store (D-14). */
 export async function biddableStoreIds(userId: string): Promise<string[]> {
@@ -86,11 +99,13 @@ function publicArea(snapshot: unknown, city: string) {
 
 function serializeBid(
   bid: Prisma.StoreBidGetPayload<{ include: { lines: true } }> | null,
-  listVersion: number
+  listVersion: number,
+  won: { orderId: string; orderNumber: string } | null = null
 ) {
   if (!bid) return null;
   return {
     id: bid.id,
+    ...(won ? { orderId: won.orderId, orderNumber: won.orderNumber } : {}),
     status: bid.status,
     itemsTotal: Number(bid.itemsTotal),
     discount: Number(bid.discount),
@@ -125,6 +140,7 @@ export async function listsForStore(actor: Actor, opts: { storeId?: string | nul
           include: {
             _count: { select: { lines: true } },
             bids: { where: { storeId: { in: storeIds } }, include: { lines: true } },
+            order: { select: { id: true, orderNumber: true } },
           },
         },
       },
@@ -145,7 +161,7 @@ export async function listsForStore(actor: Actor, opts: { storeId?: string | nul
         sentAt: b.sentAt,
         seen: !!b.seenAt,
         declined: !!b.declinedAt,
-        myBid: serializeBid(bid, b.list.version),
+        myBid: serializeBid(bid, b.list.version, wonOrder(bid, b.list)),
       };
     }),
   };
@@ -163,8 +179,9 @@ export async function listForStore(actor: Actor, listId: string, storeIdParam?: 
   const list = await prisma.itemList.findUniqueOrThrow({
     where: { id: listId },
     include: {
-      lines: { orderBy: { sortOrder: "asc" }, include: { category: { select: { name: true } } } },
+      lines: { orderBy: LINE_ORDER, include: { category: { select: { name: true } } } },
       bids: { where: { storeId }, include: { lines: true } },
+      order: { select: { id: true, orderNumber: true } },
     },
   });
   return {
@@ -185,7 +202,7 @@ export async function listForStore(actor: Actor, listId: string, storeIdParam?: 
       category: l.category?.name ?? null,
       note: l.note,
     })),
-    myBid: serializeBid(list.bids[0] ?? null, list.version),
+    myBid: serializeBid(list.bids[0] ?? null, list.version, wonOrder(list.bids[0] ?? null, list)),
   };
 }
 
@@ -194,7 +211,7 @@ async function lockForStore(tx: Prisma.TransactionClient, listId: string, storeI
   await tx.$queryRaw`SELECT id FROM "ItemList" WHERE id = ${listId} FOR UPDATE`;
   const list = await tx.itemList.findUnique({
     where: { id: listId },
-    include: { lines: true, broadcasts: { where: { storeId } } },
+    include: { lines: { orderBy: LINE_ORDER }, broadcasts: { where: { storeId } } },
   });
   if (!list || !list.broadcasts.length) throw new ListError("NOT_FOUND", "List not found.", 404);
   const store = await tx.store.findUnique({ where: { id: storeId }, select: { status: true } });
@@ -211,6 +228,9 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
 
   const { bid, created, customerId, version } = await prisma.$transaction(async (tx) => {
     const list = await lockForStore(tx, listId, storeId);
+    if (input.listVersion != null && input.listVersion !== list.version) {
+      throw new ListError("LIST_CHANGED", "The list has changed. Reload it and answer every item.", 409);
+    }
 
     // Every current line answered exactly once.
     const byId = new Map(input.lines.map((l) => [l.lineId, l]));
