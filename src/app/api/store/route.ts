@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { apiError, apiSuccess, toNumber, parsePagination, paginationMeta, toUserMessage } from "@/lib/utils";
 import { writeAuditLog } from "@/lib/audit";
 import { syncOrderAfterFulfillmentReady } from "@/lib/orders/fulfillment-sync";
+import { notifyPostPackOpened, openPostPackRequest } from "@/lib/orders/post-pack-bidding";
 import { notifyOrderEvent } from "@/lib/notifications/service";
 import { OrderStatus, Prisma } from "@prisma/client";
 import {
@@ -367,7 +368,12 @@ export async function PATCH(req: Request) {
             tx,
             fulfillment.orderId
           );
-        return { updated, orderSync };
+        // Item-list orders only: riders bid on the delivery once the order is ready (W8).
+        // Cart orders are left exactly as before.
+        const postPack = orderSync.becameReady
+          ? await openPostPackRequest(tx, fulfillment.orderId)
+          : null;
+        return { updated, orderSync, postPack };
       });
 
       await writeAuditLog({
@@ -379,7 +385,11 @@ export async function PATCH(req: Request) {
         newValue: { status: targetStatus, orderNumber: fulfillment.order.orderNumber },
       });
 
-      if (result.orderSync?.becameReady) {
+      if (result.postPack?.isListOrder) {
+        if (result.postPack.created && result.postPack.requestId) {
+          await notifyPostPackOpened(result.postPack.requestId);
+        }
+      } else if (result.orderSync?.becameReady) {
         await notifyOrderEvent(
           fulfillment.orderId,
           "ORDER_READY",

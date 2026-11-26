@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { tickDueLists } from "@/lib/lists/broadcast";
+import { tickDuePostPackRequests } from "@/lib/orders/post-pack-bidding";
 import { apiError, apiSuccess } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,10 @@ function authorized(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return apiError("Unauthorized", 401);
   try {
-    return apiSuccess(await tickDueLists({ limit: 200 }));
+    const lists = await tickDueLists({ limit: 200 });
+    // After-packing rider bidding on list orders: re-open once, then hand over to admin.
+    const riderBids = await tickDuePostPackRequests({ limit: 200 });
+    return apiSuccess({ ...lists, riderBids });
   } catch (e) {
     console.error("[cron/lists-tick]", e);
     return apiError("Lists tick failed", 500);
