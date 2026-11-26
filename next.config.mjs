@@ -20,6 +20,15 @@ const securityHeaders = [
 const nextConfig = {
   // Don't advertise the framework/version.
   poweredByHeader: false,
+  // `next dev` only: keep compiled routes in memory for the whole session. The
+  // default drops a route after 60 s unused (and keeps just 5), so the browser
+  // tests — which revisit every page once per width, minutes apart — recompile
+  // each route on every visit; on a 2-vCPU CI runner that stalls page data
+  // requests for several seconds. No effect on `next build` / `next start`.
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 500,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

@@ -167,7 +167,7 @@ export async function openPostPackRequest(tx: Tx, orderId: string): Promise<Open
     pickupPoint,
   };
 
-  const s = await getListSettings();
+  const s = await getListSettings(tx);
   const created = await tx.deliveryRequest.createMany({
     data: [
       {
@@ -297,7 +297,7 @@ async function assertRiderMayBid(tx: Db, riderId: string, req: { summary: Prisma
     where: { id: riderId },
     select: { city: true, lastLatitude: true, lastLongitude: true, lastLocationAt: true },
   });
-  const s = await getListSettings();
+  const s = await getListSettings(tx);
   if (!rider || !riderNearPickup(rider, pickupOf(req), postPackRadiusKm(s.postPackRiderRadiusKm, req.reopenCount)).near) {
     throw new BiddingError("TOO_FAR", "This delivery is too far from you.", 403);
   }

@@ -1,4 +1,5 @@
 /** Item-list bidding settings (StoreSettings) and the feature switch. */
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 export type ListSettings = {
@@ -13,8 +14,14 @@ export type ListSettings = {
   postPackRiderRadiusKm: number;
 };
 
-export async function getListSettings(): Promise<ListSettings> {
-  const s = await prisma.storeSettings.findFirst({
+/**
+ * Pass the transaction client when called inside `prisma.$transaction`: a call on
+ * the global client there needs a second pool connection while the transaction
+ * holds one, and with a small pool (Neon pooled URL, CI) concurrent transactions
+ * can each wait for a connection none of them will give back.
+ */
+export async function getListSettings(db: Prisma.TransactionClient | typeof prisma = prisma): Promise<ListSettings> {
+  const s = await db.storeSettings.findFirst({
     select: {
       listBiddingEnabled: true,
       listRadiusStartKm: true,
