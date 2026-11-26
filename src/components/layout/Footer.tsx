@@ -60,48 +60,48 @@ export async function Footer() {
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-ink-subtle">Shop</p>
-          <ul className="mt-4 space-y-2.5 text-sm">
-            <li><Link href="/products" className="hover:text-white">All products</Link></li>
-            <li><Link href="/products?sort=discount" className="hover:text-white">Deals</Link></li>
-            <li><Link href="/stores" className="hover:text-white">All stores</Link></li>
-            <li><Link href="/wishlist" className="hover:text-white">Wishlist</Link></li>
-            <li><Link href="/account/orders" className="hover:text-white">My orders</Link></li>
+          <ul className="mt-4 space-y-2.5 text-sm max-md:space-y-0">
+            <li><Link href="/products" className="hover:text-white max-md:inline-flex max-md:items-center">All products</Link></li>
+            <li><Link href="/products?sort=discount" className="hover:text-white max-md:inline-flex max-md:items-center">Deals</Link></li>
+            <li><Link href="/stores" className="hover:text-white max-md:inline-flex max-md:items-center">All stores</Link></li>
+            <li><Link href="/wishlist" className="hover:text-white max-md:inline-flex max-md:items-center">Wishlist</Link></li>
+            <li><Link href="/account/orders" className="hover:text-white max-md:inline-flex max-md:items-center">My orders</Link></li>
           </ul>
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-ink-subtle">Help &amp; policies</p>
-          <ul className="mt-4 space-y-2.5 text-sm">
-            <li><Link href="/about" className="hover:text-white">About us</Link></li>
-            <li><Link href="/contact" className="hover:text-white">Contact us</Link></li>
-            <li><Link href="/faq" className="hover:text-white">FAQ</Link></li>
-            <li><Link href="/return-policy" className="hover:text-white">Return &amp; refund policy</Link></li>
-            <li><Link href="/terms" className="hover:text-white">Terms &amp; conditions</Link></li>
-            <li><Link href="/privacy" className="hover:text-white">Privacy policy</Link></li>
+          <ul className="mt-4 space-y-2.5 text-sm max-md:space-y-0">
+            <li><Link href="/about" className="hover:text-white max-md:inline-flex max-md:items-center">About us</Link></li>
+            <li><Link href="/contact" className="hover:text-white max-md:inline-flex max-md:items-center">Contact us</Link></li>
+            <li><Link href="/faq" className="hover:text-white max-md:inline-flex max-md:items-center">FAQ</Link></li>
+            <li><Link href="/return-policy" className="hover:text-white max-md:inline-flex max-md:items-center">Return &amp; refund policy</Link></li>
+            <li><Link href="/terms" className="hover:text-white max-md:inline-flex max-md:items-center">Terms &amp; conditions</Link></li>
+            <li><Link href="/privacy" className="hover:text-white max-md:inline-flex max-md:items-center">Privacy policy</Link></li>
           </ul>
         </div>
         <div>
           <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400">
             <Store className="h-3.5 w-3.5" /> Sell &amp; deliver
           </p>
-          <ul className="mt-4 space-y-2.5 text-sm">
+          <ul className="mt-4 space-y-2.5 text-sm max-md:space-y-0">
             <li>
-              <Link href="/store" className="font-semibold text-emerald-300 hover:text-white">
+              <Link href="/store" className="font-semibold text-emerald-300 hover:text-white max-md:inline-flex max-md:items-center">
                 Sell on MandiBazaar
               </Link>
             </li>
-            <li><Link href="/store-portal" className="hover:text-white">Store portal</Link></li>
-            <li><Link href="/onboarding/store?force=1" className="hover:text-white">Store guide</Link></li>
-            <li className="pt-1">
-              <Link href="/register/rider" className="font-semibold text-emerald-300 hover:text-white">
+            <li><Link href="/store-portal" className="hover:text-white max-md:inline-flex max-md:items-center">Store portal</Link></li>
+            <li><Link href="/onboarding/store?force=1" className="hover:text-white max-md:inline-flex max-md:items-center">Store guide</Link></li>
+            <li className="pt-1 max-md:pt-0">
+              <Link href="/register/rider" className="font-semibold text-emerald-300 hover:text-white max-md:inline-flex max-md:items-center">
                 Become a rider
               </Link>
             </li>
-            <li><Link href="/rider-portal" className="hover:text-white">Rider portal</Link></li>
+            <li><Link href="/rider-portal" className="hover:text-white max-md:inline-flex max-md:items-center">Rider portal</Link></li>
           </ul>
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-ink-subtle">Customer support</p>
-          <ul className="mt-4 space-y-2.5 text-sm">
+          <ul className="mt-4 space-y-2.5 text-sm max-md:space-y-0">
             {site.whatsapp && (
               <li>
                 <a href={whatsappLink(site.whatsapp)} className="flex items-center gap-2 hover:text-white" target="_blank" rel="noopener noreferrer">
