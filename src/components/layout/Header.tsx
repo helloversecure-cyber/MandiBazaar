@@ -250,7 +250,9 @@ export function Header({
           <div className="ml-auto flex items-center sm:gap-1">
             <Link
               href="/products?focus=search"
-              className="rounded-lg p-2.5 text-ink-muted hover:bg-slate-100 md:hidden"
+              // Hidden below 400px: the bottom navigation already has Search, and the
+              // logo + cart + account need the room on narrow phones (wide system fonts).
+              className="rounded-lg p-2.5 text-ink-muted hover:bg-slate-100 max-[399px]:hidden md:hidden"
               aria-label="Search"
             >
               <Search className="h-5 w-5" />
