@@ -8,6 +8,8 @@ import { pendingPaymentTtlMinutes } from "@/lib/orders/expire-pending";
 import { customerDisplayPhone, orderWaitingFlag } from "@/lib/orders/attention";
 import { manualPaymentDue } from "@/lib/orders/apply-manual-online-payment";
 import { normalizePkPhone } from "@/lib/validators/pk";
+import { customerDeliveryCodeView, orderRequiresDeliveryCode } from "@/lib/orders/delivery-code";
+import { storeReviewForOrder } from "@/lib/stores/reviews";
 import {
   cashDueBreakdown,
   deliveryFeePaymentLabel,
@@ -136,7 +138,12 @@ export async function GET(
       const customerBase = settled
         ? { ...base, remainingAmount: 0, cashDue: { products: 0, delivery: 0, total: 0 } }
         : base;
-      return apiSuccess({ ...customerBase, paymentProofs: myProofs });
+      // W9: the customer's own delivery code (riders never get this) and their store rating.
+      const [deliveryCode, storeReview] = await Promise.all([
+        customerDeliveryCodeView(order.id),
+        storeReviewForOrder(session.user.id, order.id),
+      ]);
+      return apiSuccess({ ...customerBase, paymentProofs: myProofs, deliveryCode, storeReview });
     }
 
     // ---- Admin-only detail (QA P2: full order page) ----
@@ -237,6 +244,10 @@ export async function GET(
           cashCollected: !!order.cashCollection,
         }),
         canAssignRider: canAssignRider(order.orderStatus),
+        /** W9: item-list order protected by the customer's code (admin can reset it). */
+        deliveryCodeRequired: await orderRequiresDeliveryCode(prisma, order.id),
+        deliveryCodeAttempts: order.deliveryCodeAttempts,
+        deliveryCodeLockedUntil: order.deliveryCodeLockedUntil,
         customerPhone: display.phone,
         customerPhoneSource: display.source,
         accountPhoneInvalid: display.accountPhoneInvalid,
