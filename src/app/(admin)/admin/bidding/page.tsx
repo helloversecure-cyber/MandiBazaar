@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/feedback";
 import { Bike, Clock, Loader2, Users, XCircle } from "lucide-react";
+import { BiddingTabs } from "@/components/admin/BiddingTabs";
 
 type Bid = { id: string; riderId: string; riderName: string | null; amount: number; status: string };
 type Req = {
@@ -61,14 +62,15 @@ export default function AdminBiddingPage() {
   }
 
   if (!requests) {
-    return <div className="flex items-center justify-center py-20 text-ink-subtle"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…</div>;
+    return <div><BiddingTabs /><div className="flex items-center justify-center py-20 text-ink-subtle"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…</div></div>;
   }
 
   return (
     <div>
+      <BiddingTabs />
       <div className="flex items-center gap-2">
         <Bike className="h-6 w-6 text-ink" />
-        <h1 className="font-display text-3xl text-ink">Rider Bidding</h1>
+        <h1 className="font-display text-3xl text-ink">Checkout rider bids</h1>
       </div>
       <p className="mt-1 text-sm text-ink-subtle">
         Live delivery auctions. You can cancel a stuck or abandoned request — its bids are rejected and the customer can request again.

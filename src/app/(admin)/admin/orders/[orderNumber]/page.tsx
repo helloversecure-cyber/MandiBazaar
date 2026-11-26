@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { useConfirm, useToast } from "@/components/ui/feedback";
 import { isUsableImageUrl } from "@/lib/orders/proof-review";
 import type { OrderStatus } from "@prisma/client";
+import { OrderBiddingSection, type OrderBidding } from "@/components/admin/OrderBiddingSection";
 
 type Item = {
   id: string;
@@ -72,6 +73,8 @@ type Detail = {
     deliveryCodeRequired?: boolean;
     deliveryCodeAttempts?: number;
     deliveryCodeLockedUntil?: string | null;
+    /** W15: item list, store offers and rider bids behind the order */
+    bidding?: OrderBidding | null;
     customerPhone: string | null;
     customerPhoneSource: string | null;
     accountPhoneInvalid: boolean;
@@ -411,6 +414,17 @@ export default function AdminOrderDetailPage({ params }: { params: { orderNumber
           </div>
         )}
       </section>
+
+      {a.bidding && (
+        <OrderBiddingSection
+          bidding={a.bidding}
+          code={{
+            required: a.deliveryCodeRequired,
+            attempts: a.deliveryCodeAttempts,
+            lockedUntil: a.deliveryCodeLockedUntil,
+          }}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Customer */}

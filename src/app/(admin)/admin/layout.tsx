@@ -25,12 +25,13 @@ import {
   UserCog,
   Images,
   HandCoins,
+  Gavel,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import type { NavGroup } from "@/components/dashboard/nav";
 
 /** Items waiting for review, shown as nav badges (QA P4). */
-type ReviewCounts = { stores: number; products: number; productChanges: number; riders: number };
+type ReviewCounts = { stores: number; products: number; productChanges: number; riders: number; needsRider?: number };
 
 const ADMIN_PRIMARY = ["/admin", "/admin/orders", "/admin/stores", "/admin/finance"];
 
@@ -38,6 +39,7 @@ function buildGroups(c: ReviewCounts | null): NavGroup[] {
   const storeBadge = c && c.stores > 0 ? c.stores : undefined;
   const productBadge = c && c.products + c.productChanges > 0 ? c.products + c.productChanges : undefined;
   const riderBadge = c && c.riders > 0 ? c.riders : undefined;
+  const needsRiderBadge = c?.needsRider ? c.needsRider : undefined;
   return [
     {
       label: "Overview",
@@ -79,7 +81,13 @@ function buildGroups(c: ReviewCounts | null): NavGroup[] {
           badge: riderBadge,
           badgeTitle: riderBadge ? `${riderBadge} rider application(s) waiting for review` : undefined,
         },
-        { href: "/admin/bidding", label: "Rider Bidding", short: "Bidding", icon: Bike },
+        {
+          href: "/admin/bidding",
+          label: "Bidding",
+          icon: Gavel,
+          badge: needsRiderBadge,
+          badgeTitle: needsRiderBadge ? `${needsRiderBadge} list order(s) need a rider` : undefined,
+        },
       ],
     },
     {

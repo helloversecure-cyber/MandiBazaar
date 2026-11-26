@@ -10,6 +10,7 @@ import { manualPaymentDue } from "@/lib/orders/apply-manual-online-payment";
 import { normalizePkPhone } from "@/lib/validators/pk";
 import { customerDeliveryCodeView, orderRequiresDeliveryCode } from "@/lib/orders/delivery-code";
 import { storeReviewForOrder } from "@/lib/stores/reviews";
+import { adminOrderBiddingHistory } from "@/lib/lists/admin";
 import {
   cashDueBreakdown,
   deliveryFeePaymentLabel,
@@ -250,6 +251,8 @@ export async function GET(
         deliveryCodeRequired: await orderRequiresDeliveryCode(prisma, order.id),
         deliveryCodeAttempts: order.deliveryCodeAttempts,
         deliveryCodeLockedUntil: order.deliveryCodeLockedUntil,
+        /** W15: the item list, store offers and rider bids behind this order (null for cart orders). */
+        bidding: await adminOrderBiddingHistory(order.id),
         customerPhone: display.phone,
         customerPhoneSource: display.source,
         accountPhoneInvalid: display.accountPhoneInvalid,

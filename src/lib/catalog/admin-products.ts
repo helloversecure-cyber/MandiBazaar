@@ -394,11 +394,15 @@ export async function archiveProduct(actor: Actor, id: string, reasonRaw: unknow
 
 /** Counts for the admin nav badges (QA P4). */
 export async function adminReviewCounts() {
-  const [stores, products, productChanges, riders] = await Promise.all([
+  const [stores, products, productChanges, riders, needsRider] = await Promise.all([
     prisma.store.count({ where: { status: "PENDING" } }),
     prisma.product.count({ where: { status: "DRAFT" } }),
     prisma.product.count({ where: { AND: [{ status: { not: "DRAFT" } }, HAS_PENDING_CHANGES] } }),
     prisma.rider.count({ where: { approvalStatus: "PENDING" } }),
+    // W15: list orders whose after-packing rider bidding got no bids
+    prisma.deliveryRequest.count({
+      where: { trigger: "POST_PACK", status: "NO_BIDS", order: { orderStatus: "READY_FOR_DISPATCH", riderId: null } },
+    }),
   ]);
-  return { stores, products, productChanges, riders };
+  return { stores, products, productChanges, riders, needsRider };
 }
