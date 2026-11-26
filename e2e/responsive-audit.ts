@@ -121,9 +121,13 @@ export async function findHorizontalOverflow(page: Page): Promise<string[]> {
   });
 }
 
-/** L-09: buttons, links and form controls at least 44 × 44 px (call below 768 px only). */
-export async function findSmallTapTargets(page: Page): Promise<string[]> {
-  return page.evaluate((MIN) => {
+/**
+ * L-09: buttons, links and form controls at least 44 × 44 px (call below 768 px only).
+ * `root` limits the check to one part of the page (e.g. "main" on the portals,
+ * whose shared shell is covered by W17).
+ */
+export async function findSmallTapTargets(page: Page, root?: string): Promise<string[]> {
+  return page.evaluate(([MIN, rootSel]) => {
     const out: string[] = [];
     const sel = [
       "a[href]",
@@ -133,7 +137,8 @@ export async function findSmallTapTargets(page: Page): Promise<string[]> {
       "textarea",
       'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])',
     ].join(",");
-    for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+    const scope: ParentNode = rootSel ? document.querySelector(rootSel) ?? document : document;
+    for (const el of Array.from(scope.querySelectorAll<HTMLElement>(sel))) {
       if (el.closest('[aria-hidden="true"], [inert]')) continue;
       const s = getComputedStyle(el);
       if (s.display === "none" || s.visibility === "hidden" || s.pointerEvents === "none") continue;
@@ -167,7 +172,7 @@ export async function findSmallTapTargets(page: Page): Promise<string[]> {
       }
     }
     return out;
-  }, MIN_TAP);
+  }, [MIN_TAP, root ?? null] as const);
 }
 
 /** L-10: every run of Urdu text stays inside the box that clips it and inside the window. */

@@ -13,7 +13,12 @@ import {
   storeOrderStatusLabel,
   type StoreOrderTab,
 } from "@/lib/stores/fulfillment-rules";
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardList, Search } from "lucide-react";
+import Link from "next/link";
+import { Badge } from "@/components/ui/Badge";
+import { Countdown } from "@/components/lists/ListBits";
+import { storeRiderStage } from "@/lib/lists/store-ui";
+import { isStoreOrderTab } from "@/lib/stores/fulfillment-rules";
 
 type Item = {
   id: string;
@@ -46,6 +51,10 @@ type Fulfillment = {
     customer: { fullName: string; phone: string | null };
     items: Item[];
     rider?: { name: string; phone: string | null; vehicleType?: string | null } | null;
+    /** W7/W8: the order came from a customer's item list; riders bid after packing. */
+    isListOrder?: boolean;
+    itemListId?: string | null;
+    postPackRequest?: { status: string; expiresAt: string } | null;
   };
 };
 
@@ -98,6 +107,19 @@ export default function StoreOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [openId, setOpenId] = useState("");
+  // Deep link from a won list: /store-portal/orders?tab=all&q=MB-…
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("tab");
+    const qq = (sp.get("q") || "").trim().slice(0, 60);
+    if (isStoreOrderTab(t)) setTab(t);
+    if (qq) {
+      setQ(qq);
+      setQInput(qq);
+    }
+    setReady(true);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,8 +145,8 @@ export default function StoreOrdersPage() {
   }, [tab, page, q]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (ready) void load();
+  }, [load, ready]);
 
   async function advance(f: Fulfillment, status: string) {
     // M-7: confirm before changing an order's status (no accidental one-tap).
@@ -148,7 +170,9 @@ export default function StoreOrdersPage() {
       } else {
         toast.success(
           status === "READY_FOR_DISPATCH"
-            ? `${f.order.orderNumber} is ready for pickup — a rider will be assigned`
+            ? f.order.isListOrder
+              ? `${f.order.orderNumber} is ready. Riders near your store are bidding to deliver it`
+              : `${f.order.orderNumber} is ready for pickup — a rider will be assigned`
             : `${f.order.orderNumber} updated`
         );
       }
@@ -236,6 +260,7 @@ export default function StoreOrdersPage() {
           const open = openId === f.id;
           // M-6: "items" = number of distinct products (not total quantity).
           const itemCount = f.order.items.length;
+          const riderStage = storeRiderStage(f.order);
           return (
             <div key={f.id} className="rounded-2xl bg-card p-4 shadow-card">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -250,12 +275,37 @@ export default function StoreOrdersPage() {
                     >
                       {storeOrderStatusLabel(f.order.orderStatus, f.status)}
                     </span>
+                    {f.order.isListOrder && (
+                      <Badge tone="brand" className="gap-1">
+                        <ClipboardList className="h-3 w-3" /> From a customer list
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-0.5 text-sm text-ink-subtle">
                     {f.order.customer.fullName}
                     {f.order.deliveryArea ? ` · ${f.order.deliveryArea}` : ""} ·{" "}
                     {new Date(f.order.createdAt).toLocaleDateString()} · {plural(itemCount, "item")}
                   </p>
+                  {riderStage && (
+                    <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs" data-testid="rider-stage">
+                      <Badge tone={riderStage.tone} dot>
+                        {riderStage.label}
+                      </Badge>
+                      {riderStage.expiresAt && (
+                        <span className="text-ink-subtle">
+                          <Countdown until={riderStage.expiresAt} onEnd={() => void load()} />
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {f.order.isListOrder && f.order.itemListId && (
+                    <Link
+                      href={`/store-portal/lists/${f.order.itemListId}`}
+                      className="mt-1 inline-flex items-center text-xs font-semibold text-brand-700 hover:underline max-md:min-h-[44px] dark:text-brand-300"
+                    >
+                      View the customer&apos;s list and your offer
+                    </Link>
+                  )}
                   {f.order.rider && (
                     <p className="mt-1 text-xs text-ink-muted">
                       Rider: {f.order.rider.name}

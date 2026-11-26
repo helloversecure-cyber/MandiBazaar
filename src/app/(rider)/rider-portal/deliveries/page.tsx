@@ -454,6 +454,12 @@ export default function RiderDeliveriesPage() {
                   </div>
                 )}
 
+              {o.deliveryCodeRequired && ["ASSIGNED_TO_RIDER", "OUT_FOR_DELIVERY"].includes(o.orderStatus) && (
+                <p className="mt-4 rounded-xl bg-brand-50 px-3 py-2 text-sm text-ink dark:bg-brand-500/10" data-testid="code-hint">
+                  This order needs the customer&apos;s 4-digit delivery code. Ask for it at the door and enter it below before
+                  you mark the order delivered.
+                </p>
+              )}
               <div className="mt-4 flex flex-wrap gap-2">
                 {o.orderStatus === "ASSIGNED_TO_RIDER" && (
                   <Button
@@ -469,7 +475,8 @@ export default function RiderDeliveriesPage() {
                       <label className="flex flex-wrap items-center gap-2 text-sm">
                         <span>Customer&apos;s delivery code</span>
                         <input
-                          className="w-24 rounded-xl border border-line px-3 py-2 text-center text-sm tracking-widest"
+                          className="min-h-[44px] w-24 rounded-xl border border-line px-3 py-2 text-center text-sm tracking-widest"
+                          aria-label="Customer's delivery code"
                           inputMode="numeric"
                           autoComplete="off"
                           placeholder="0000"

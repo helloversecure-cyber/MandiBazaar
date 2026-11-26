@@ -14,26 +14,57 @@ import {
   Tag,
   HelpCircle,
   TrendingUp,
+  ClipboardList,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import type { NavGroup } from "@/components/dashboard/nav";
 import { StorePendingApproval } from "@/components/store/StorePendingApproval";
+import { useStoreListsBadge } from "@/components/lists/store/useStoreListsBadge";
 
-const GROUPS: NavGroup[] = [
-  {
-    items: [
-      { href: "/store-portal", label: "Dashboard", short: "Home", icon: LayoutDashboard },
-      { href: "/store-portal/products", label: "Products", icon: Package },
-      { href: "/store-portal/deals", label: "Deals", icon: Tag },
-      { href: "/store-portal/orders", label: "Orders", icon: ShoppingCart },
-      { href: "/store-portal/finance", label: "Earnings", icon: TrendingUp },
-      { href: "/store-portal/payouts", label: "Payouts", icon: Wallet },
-      { href: "/store-portal/settings", label: "Store profile", short: "Profile", icon: Settings },
-      // F6: reopen the welcome tour any time (never forced after it's done)
-      { href: "/onboarding/store?force=1&next=/store-portal", label: "Guide", icon: HelpCircle },
-    ],
-  },
-];
+function buildGroups(lists: { show: boolean; count: number }): NavGroup[] {
+  return [
+    {
+      items: [
+        {
+          href: "/store-portal",
+          label: "Dashboard",
+          short: "Home",
+          icon: LayoutDashboard,
+        },
+        { href: "/store-portal/products", label: "Products", icon: Package },
+        { href: "/store-portal/deals", label: "Deals", icon: Tag },
+        { href: "/store-portal/orders", label: "Orders", icon: ShoppingCart },
+        // W13: customer item lists sent to this store (hidden until list bidding reaches the owner)
+        ...(lists.show
+          ? [
+              {
+                href: "/store-portal/lists",
+                label: "Incoming lists",
+                short: "Lists",
+                icon: ClipboardList,
+                badge: lists.count > 0 ? lists.count : undefined,
+                badgeTitle: lists.count > 0 ? `${lists.count} list(s) waiting for your offer` : undefined,
+              },
+            ]
+          : []),
+        { href: "/store-portal/finance", label: "Earnings", icon: TrendingUp },
+        { href: "/store-portal/payouts", label: "Payouts", icon: Wallet },
+        {
+          href: "/store-portal/settings",
+          label: "Store profile",
+          short: "Profile",
+          icon: Settings,
+        },
+        // F6: reopen the welcome tour any time (never forced after it's done)
+        {
+          href: "/onboarding/store?force=1&next=/store-portal",
+          label: "Guide",
+          icon: HelpCircle,
+        },
+      ],
+    },
+  ];
+}
 
 const STORE_PRIMARY = ["/store-portal", "/store-portal/products", "/store-portal/orders", "/store-portal/finance"];
 
@@ -45,6 +76,7 @@ export default function StorePortalLayout({ children }: { children: React.ReactN
   // shows the Pending Approval screen in place (they stay signed in).
   const [access, setAccess] = useState<"checking" | "allowed" | "blocked">("checking");
   const [blockReason, setBlockReason] = useState<string | null>(null);
+  const lists = useStoreListsBadge(pathname, access === "allowed");
 
   useEffect(() => {
     if (status === "loading") return;
@@ -63,7 +95,9 @@ export default function StorePortalLayout({ children }: { children: React.ReactN
     }
 
     let cancelled = false;
-    setAccess("checking");
+    // Re-checks (session refetch on window focus) keep the page mounted, so a
+    // half-filled form (e.g. a bid) isn't wiped by the loading screen.
+    setAccess((a) => (a === "allowed" ? a : "checking"));
     fetch("/api/store/access", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -82,13 +116,12 @@ export default function StorePortalLayout({ children }: { children: React.ReactN
     return () => {
       cancelled = true;
     };
-  }, [status, session, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session?.user?.id, session?.user?.role, router]);
 
   if (status === "loading" || status === "unauthenticated" || access === "checking") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-app text-ink-subtle">
-        Loading store portal…
-      </div>
+      <div className="flex min-h-screen items-center justify-center bg-app text-ink-subtle">Loading store portal…</div>
     );
   }
 
@@ -105,7 +138,7 @@ export default function StorePortalLayout({ children }: { children: React.ReactN
       portalLabel="Store portal"
       portalIcon={Store}
       rootHref="/store-portal"
-      groups={GROUPS}
+      groups={buildGroups(lists)}
       primaryHrefs={STORE_PRIMARY}
       user={{ name: session?.user?.name, role: "Store Owner" }}
       onSignOut={() => signOut({ callbackUrl: "/store" })}
