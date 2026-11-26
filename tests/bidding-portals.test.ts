@@ -311,7 +311,7 @@ describeDb("admin item-list bidding (W15)", () => {
     radiusStepKm: 5,
     radiusStepMins: 30,
     maxStores: 20,
-    expiryHours: 24,
+    expiryHours: 48,
     postPackBidWindowSecs: 300,
     postPackRiderRadiusKm: 10,
   };

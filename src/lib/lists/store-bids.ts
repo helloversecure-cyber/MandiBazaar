@@ -113,6 +113,7 @@ function serializeBid(
     prepMinutes: bid.prepMinutes,
     note: bid.note,
     coveredCount: bid.coveredCount,
+    round: bid.round,
     needsUpdate: bid.status === "PENDING" && bid.listVersion < listVersion,
     updatedAt: bid.updatedAt,
     lines: bid.lines.map((l) => ({ lineId: l.lineId, available: l.available, unitPrice: l.unitPrice == null ? null : Number(l.unitPrice) })),
@@ -124,6 +125,14 @@ export async function listsForStore(actor: Actor, opts: { storeId?: string | nul
   const mine = await biddableStoreIds(actor.id);
   const storeIds = opts.storeId ? mine.filter((s) => s === opts.storeId) : mine;
   if (!storeIds.length) return { total: 0, items: [] };
+  // Rounds that ended since the last tick restart now, so they show as open again.
+  const due = await prisma.listBroadcast.findMany({
+    where: { storeId: { in: storeIds }, list: { status: "BIDDING", expiresAt: { lte: new Date() } } },
+    select: { listId: true },
+    distinct: ["listId"],
+    take: 20,
+  });
+  for (const d of due) await tickList(d.listId).catch((e) => console.error("[store-bids] tick", e));
   const where: Prisma.ListBroadcastWhereInput = {
     storeId: { in: storeIds },
     ...(opts.filter === "all" ? {} : { list: { status: "BIDDING", expiresAt: { gt: new Date() } } }),
@@ -149,7 +158,8 @@ export async function listsForStore(actor: Actor, opts: { storeId?: string | nul
   return {
     total,
     items: rows.map((b) => {
-      const bid = b.list.bids.find((x) => x.storeId === b.storeId) ?? null;
+      // This store's offer in the list's current round (earlier rounds' offers are EXPIRED records).
+      const bid = b.list.bids.find((x) => x.storeId === b.storeId && x.round === b.list.round) ?? null;
       return {
         listId: b.listId,
         storeId: b.storeId,
@@ -158,6 +168,8 @@ export async function listsForStore(actor: Actor, opts: { storeId?: string | nul
         distanceKm: b.distanceKm == null ? null : Number(b.distanceKm),
         lineCount: b.list._count.lines,
         expiresAt: b.list.expiresAt,
+        round: b.list.round,
+        roundEndsAt: b.list.expiresAt,
         sentAt: b.sentAt,
         seen: !!b.seenAt,
         declined: !!b.declinedAt,
@@ -184,6 +196,7 @@ export async function listForStore(actor: Actor, listId: string, storeIdParam?: 
       order: { select: { id: true, orderNumber: true } },
     },
   });
+  const bid = list.bids.find((b) => b.round === list.round) ?? null;
   return {
     listId: list.id,
     storeId,
@@ -193,6 +206,8 @@ export async function listForStore(actor: Actor, listId: string, storeIdParam?: 
     distanceKm: broadcast.distanceKm == null ? null : Number(broadcast.distanceKm),
     note: list.note,
     expiresAt: list.expiresAt,
+    round: list.round,
+    roundEndsAt: list.expiresAt,
     declined: !!broadcast.declinedAt,
     lines: list.lines.map((l) => ({
       id: l.id,
@@ -202,7 +217,7 @@ export async function listForStore(actor: Actor, listId: string, storeIdParam?: 
       category: l.category?.name ?? null,
       note: l.note,
     })),
-    myBid: serializeBid(list.bids[0] ?? null, list.version, wonOrder(list.bids[0] ?? null, list)),
+    myBid: serializeBid(bid, list.version, wonOrder(bid, list)),
   };
 }
 
@@ -225,6 +240,8 @@ async function lockForStore(tx: Prisma.TransactionClient, listId: string, storeI
 /** Make or update this store's offer (D-03 … D-11, D-15, D-17). */
 export async function submitBid(actor: Actor, listId: string, input: BidInput, meta: RequestMeta = {}) {
   const storeId = await resolveStore(actor, listId, input.storeId);
+  // A round that just ended restarts first, so this offer lands in the new round.
+  await tickList(listId).catch((e) => console.error("[store-bids] tick", e));
 
   const { bid, created, customerId, version } = await prisma.$transaction(async (tx) => {
     const list = await lockForStore(tx, listId, storeId);
@@ -260,7 +277,7 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
       throw new ListError("BAD_DISCOUNT", "The discount must be less than the total.", 400, "discount");
     }
 
-    const existing = await tx.storeBid.findUnique({ where: { listId_storeId: { listId, storeId } } });
+    const existing = await tx.storeBid.findUnique({ where: { listId_storeId_round: { listId, storeId, round: list.round } } });
     const data = {
       status: "PENDING" as const,
       itemsTotal,
@@ -272,7 +289,7 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
     };
     const bid = existing
       ? await tx.storeBid.update({ where: { id: existing.id }, data })
-      : await tx.storeBid.create({ data: { listId, storeId, ...data } });
+      : await tx.storeBid.create({ data: { listId, storeId, round: list.round, ...data } });
     await tx.storeBidLine.deleteMany({ where: { bidId: bid.id } });
     await tx.storeBidLine.createMany({
       data: list.lines.map((l) => {
@@ -311,8 +328,8 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
 export async function withdrawBid(actor: Actor, listId: string, storeIdParam?: string | null, meta: RequestMeta = {}) {
   const storeId = await resolveStore(actor, listId, storeIdParam);
   const bid = await prisma.$transaction(async (tx) => {
-    await lockForStore(tx, listId, storeId);
-    const bid = await tx.storeBid.findUnique({ where: { listId_storeId: { listId, storeId } } });
+    const list = await lockForStore(tx, listId, storeId);
+    const bid = await tx.storeBid.findUnique({ where: { listId_storeId_round: { listId, storeId, round: list.round } } });
     if (!bid || bid.status !== "PENDING") throw new ListError("NO_OFFER", "You have no open offer on this list.", 409);
     return tx.storeBid.update({ where: { id: bid.id }, data: { status: "WITHDRAWN" } });
   });
@@ -324,8 +341,8 @@ export async function withdrawBid(actor: Actor, listId: string, storeIdParam?: s
 export async function declineList(actor: Actor, listId: string, storeIdParam?: string | null, meta: RequestMeta = {}) {
   const storeId = await resolveStore(actor, listId, storeIdParam);
   await prisma.$transaction(async (tx) => {
-    await lockForStore(tx, listId, storeId);
-    const bid = await tx.storeBid.findUnique({ where: { listId_storeId: { listId, storeId } } });
+    const list = await lockForStore(tx, listId, storeId);
+    const bid = await tx.storeBid.findUnique({ where: { listId_storeId_round: { listId, storeId, round: list.round } } });
     if (bid?.status === "PENDING") {
       throw new ListError("HAS_OFFER", "You have an open offer on this list. Withdraw it first.", 409);
     }

@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/layout/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { FormError } from "@/components/ui/FieldError";
 import { useConfirm, useToast } from "@/components/ui/feedback";
-import { Countdown, ListStatusBadge, addressLine } from "@/components/lists/ListBits";
+import { Countdown, ListStatusBadge, RoundBadge, addressLine } from "@/components/lists/ListBits";
 import { ListLinesEditor, type CategoryOption } from "@/components/lists/ListLinesEditor";
 import { OfferCard } from "@/components/lists/OfferCard";
 import { AcceptOfferDialog, type AcceptResult } from "@/components/lists/AcceptOfferDialog";
@@ -257,10 +257,12 @@ export default function ListDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <ListStatusBadge status={list.status} />
+            {(bidding || list.round > 1) && <RoundBadge round={list.round} />}
             {bidding && (
               <span className="inline-flex items-center gap-1 text-sm font-semibold text-ink">
                 <Hourglass className="h-4 w-4 text-ink-subtle" />
-                <Countdown until={list.expiresAt} onEnd={() => void load()} />
+                <span className="sr-only">Offers end in</span>
+                <Countdown until={list.roundEndsAt ?? list.expiresAt} onEnd={() => void load()} />
               </span>
             )}
           </div>
@@ -280,6 +282,12 @@ export default function ListDetailPage() {
           <p className="mt-1 text-xs text-ink-subtle">
             Sent to stores within {list.radiusKm} km. If no store replies, we widen the search automatically. Offers refresh
             every few seconds.
+          </p>
+        )}
+        {bidding && (
+          <p className="mt-1 text-xs text-ink-subtle" data-testid="round-help">
+            Choose an offer before the time runs out. If you don&apos;t, the offers expire and your list restarts for a new
+            round with fresh offers.
           </p>
         )}
         {list.noPin && (

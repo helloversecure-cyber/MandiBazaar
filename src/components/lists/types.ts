@@ -32,6 +32,9 @@ export type ListSummary = {
   radiusKm: number;
   version: number;
   expiresAt: string;
+  round: number;
+  roundEndsAt: string;
+  roundStartedAt: string;
   createdAt: string;
   updatedAt: string;
   address: ListAddress;
@@ -42,7 +45,8 @@ export type ListSummary = {
 
 export type Offer = {
   bidId: string;
-  status: "PENDING" | "ACCEPTED" | "NOT_SELECTED";
+  status: "PENDING" | "ACCEPTED" | "NOT_SELECTED" | "EXPIRED";
+  round: number;
   acceptable: boolean;
   needsUpdate: boolean;
   store: {

@@ -24,7 +24,9 @@ export type StoreBidView = {
   id: string;
   orderId?: string;
   orderNumber?: string;
-  status: "PENDING" | "ACCEPTED" | "NOT_SELECTED" | "WITHDRAWN";
+  status: "PENDING" | "ACCEPTED" | "NOT_SELECTED" | "WITHDRAWN" | "EXPIRED";
+  /** Round the offer was made in. */
+  round?: number;
   itemsTotal: number;
   discount: number;
   total: number;
@@ -45,6 +47,10 @@ export type StoreListRow = {
   distanceKm: number | null;
   lineCount: number;
   expiresAt: string;
+  /** Offer round (the list restarts when a round ends without an accept). */
+  round?: number;
+  /** End of the current round (same as expiresAt). */
+  roundEndsAt?: string;
   sentAt: string;
   seen: boolean;
   declined: boolean;
@@ -74,7 +80,13 @@ export function listOpen(l: { status: string; expiresAt: string }, now = Date.no
 
 /** What this list means for the store right now. */
 export function storeListState(
-  l: { status: string; expiresAt: string; declined: boolean; myBid: Pick<StoreBidView, "status" | "needsUpdate" | "orderNumber"> | null },
+  l: {
+    status: string;
+    expiresAt: string;
+    declined: boolean;
+    round?: number;
+    myBid: Pick<StoreBidView, "status" | "needsUpdate" | "orderNumber"> | null;
+  },
   now = Date.now()
 ): { key: StoreListStateKey; label: string; tone: Tone; help: string } {
   const b = l.myBid;
@@ -112,6 +124,14 @@ export function storeListState(
   if (l.declined) return { key: "DECLINED", label: "Can't supply", tone: "neutral", help: "You said you can't supply this list." };
   if (b?.status === "WITHDRAWN") {
     return { key: "WITHDRAWN", label: "Offer withdrawn", tone: "neutral", help: "You can send a new offer while the list is open." };
+  }
+  if ((l.round ?? 1) > 1) {
+    return {
+      key: "NEW",
+      label: "Needs your offer",
+      tone: "brand",
+      help: `The customer hasn't chosen yet, so the list restarted (round ${l.round}). Send a new offer, or say you can't supply.`,
+    };
   }
   return { key: "NEW", label: "Needs your offer", tone: "brand", help: "Price what you have, or say you can't supply." };
 }

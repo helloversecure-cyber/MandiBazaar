@@ -41,6 +41,8 @@ enum StoreBidStatus {
   ACCEPTED
   NOT_SELECTED
   WITHDRAWN
+  /// The round's window ended before the customer chose; kept for records.
+  EXPIRED
 }
 
 enum LedgerEntryType {
@@ -1212,8 +1214,10 @@ model StoreSettings {
   listRadiusStepMins         Int      @default(30)
   /// Maximum stores a list is sent to per radius step.
   listMaxStores              Int      @default(20)
-  /// How long a list stays open for store bids before it expires (hours).
-  listExpiryHours            Int      @default(24)
+  /// How long each round of a list stays open for the customer to accept an offer (hours).
+  listExpiryHours            Int      @default(48)
+  /// Rounds before a list ends as EXPIRED; 0 = restart until accepted or cancelled.
+  listMaxRounds              Int      @default(0)
   /// Rider bidding window after the store packs an item-list order (seconds).
   postPackBidWindowSecs      Int      @default(300)
   /// Riders within this distance (km) of the pickup store see post-pack requests.
@@ -1361,7 +1365,14 @@ model ItemList {
   /// Current broadcast radius and when it last widened.
   radiusKm        Int             @default(5)
   lastWidenedAt   DateTime        @default(now())
+  /// End of the current round's offer window.
   expiresAt       DateTime
+  /// Offer round: starts at 1, +1 each time the window ends without an accept and the list restarts.
+  round           Int             @default(1)
+  /// When the current round started (null = round 1, started at createdAt).
+  roundStartedAt  DateTime?
+  /// "Offers expire soon" reminder sent to the customer in the current round.
+  reminderSentAt  DateTime?
   /// Bumped on every customer edit; bids made on an older version must be updated.
   version         Int             @default(1)
   acceptedBidId   String?         @unique
@@ -1410,12 +1421,14 @@ model ListBroadcast {
   sentAt     DateTime  @default(now())
   seenAt     DateTime?
   declinedAt DateTime?
+  /// Latest round the list was sent to this store in (re-sent rows move to the new round).
+  round      Int       @default(1)
 
   @@unique([listId, storeId])
   @@index([storeId])
 }
 
-/// A store's offer on a list. One per store per list; edits update it in place.
+/// A store's offer on a list. One per store per list per round; edits update it in place.
 model StoreBid {
   id           String         @id @default(cuid())
   listId       String
@@ -1431,11 +1444,13 @@ model StoreBid {
   coveredCount Int
   /// ItemList.version this bid was made against.
   listVersion  Int
+  /// ItemList.round this bid was made in.
+  round        Int            @default(1)
   lines        StoreBidLine[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  @@unique([listId, storeId])
+  @@unique([listId, storeId, round])
   @@index([storeId])
   @@index([status])
 }

@@ -25,6 +25,8 @@ export const listSettingsSchema = z
     radiusStepMins: z.coerce.number().int("Whole minutes only").min(5, "At least 5 minutes").max(24 * 60, "At most 24 hours"),
     maxStores: z.coerce.number().int("Whole number only").min(1, "At least 1 store").max(100, "At most 100 stores"),
     expiryHours: z.coerce.number().int("Whole hours only").min(1, "At least 1 hour").max(168, "At most 7 days"),
+    /** 0 = keep restarting until the customer accepts or cancels. Left out = unchanged (older clients). */
+    maxRounds: z.coerce.number().int("Whole number only").min(0, "0 or more").max(100, "At most 100 rounds").optional(),
     postPackBidWindowSecs: z.coerce
       .number()
       .int("Whole seconds only")
@@ -59,6 +61,7 @@ const COLUMN: Record<keyof ListSettingsInput, string> = {
   radiusStepMins: "listRadiusStepMins",
   maxStores: "listMaxStores",
   expiryHours: "listExpiryHours",
+  maxRounds: "listMaxRounds",
   postPackBidWindowSecs: "postPackBidWindowSecs",
   postPackRiderRadiusKm: "postPackRiderRadiusKm",
 };
@@ -73,7 +76,7 @@ export async function saveListSettings(actor: { id: string }, input: ListSetting
   const row = existing
     ? await prisma.storeSettings.update({ where: { id: existing.id }, data })
     : await prisma.storeSettings.create({ data: data as Prisma.StoreSettingsCreateInput });
-  const changed = (Object.keys(COLUMN) as (keyof ListSettingsInput)[]).filter((k) => before[k] !== input[k]);
+  const changed = (Object.keys(COLUMN) as (keyof ListSettingsInput)[]).filter((k) => input[k] !== undefined && before[k] !== input[k]);
   if (changed.length) {
     await writeAuditLog({
       userId: actor.id,
@@ -128,7 +131,7 @@ export async function adminListsOverview(opts: { status: AdminListStatusFilter; 
         customer: { select: { fullName: true } },
         order: { select: { orderNumber: true, orderStatus: true } },
         _count: { select: { lines: true, broadcasts: true } },
-        bids: { select: { status: true, storeId: true, itemsTotal: true, discount: true, id: true, store: { select: { name: true } } } },
+        bids: { select: { status: true, storeId: true, itemsTotal: true, discount: true, id: true, round: true, store: { select: { name: true } } } },
       },
     }),
     prisma.itemList.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -137,7 +140,7 @@ export async function adminListsOverview(opts: { status: AdminListStatusFilter; 
     total,
     counts: Object.fromEntries(counts.map((c) => [c.status, c._count._all])) as Record<string, number>,
     items: rows.map((l) => {
-      const live = l.bids.filter((b) => b.status !== "WITHDRAWN");
+      const live = l.bids.filter((b) => b.status !== "WITHDRAWN" && b.round === l.round);
       const won = l.bids.find((b) => b.id === l.acceptedBidId);
       return {
         id: l.id,
@@ -152,6 +155,8 @@ export async function adminListsOverview(opts: { status: AdminListStatusFilter; 
         version: l.version,
         createdAt: l.createdAt,
         expiresAt: l.expiresAt,
+        round: l.round,
+        roundEndsAt: l.expiresAt,
         acceptedStore: won ? won.store.name : null,
         acceptedTotal: won ? round2(Number(won.itemsTotal) - Number(won.discount)) : null,
         order: l.order ? { orderNumber: l.order.orderNumber, orderStatus: l.order.orderStatus } : null,
@@ -169,7 +174,7 @@ export async function adminListDetail(listId: string) {
       lines: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }], include: { category: { select: { name: true } } } },
       broadcasts: { orderBy: { sentAt: "asc" }, include: { store: { select: { id: true, name: true, area: true } } } },
       bids: {
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ round: "asc" }, { createdAt: "asc" }],
         include: { store: { select: { id: true, name: true } }, lines: true },
       },
       order: { select: { id: true, orderNumber: true, orderStatus: true, createdAt: true } },
@@ -196,6 +201,9 @@ export async function adminListDetail(listId: string) {
     version: list.version,
     createdAt: list.createdAt,
     expiresAt: list.expiresAt,
+    round: list.round,
+    roundEndsAt: list.expiresAt,
+    roundStartedAt: list.roundStartedAt ?? list.createdAt,
     cancelledAt: list.cancelledAt,
     customer: list.customer,
     lines: list.lines.map((l) => ({
@@ -215,6 +223,7 @@ export async function adminListDetail(listId: string) {
       sentAt: b.sentAt,
       seenAt: b.seenAt,
       declinedAt: b.declinedAt,
+      round: b.round,
     })),
     bids: list.bids.map((b) => ({
       id: b.id,
@@ -229,6 +238,7 @@ export async function adminListDetail(listId: string) {
       prepMinutes: b.prepMinutes,
       note: b.note,
       listVersion: b.listVersion,
+      round: b.round,
       outdated: b.status === "PENDING" && b.listVersion < list.version,
       createdAt: b.createdAt,
       updatedAt: b.updatedAt,

@@ -2,7 +2,7 @@
  * Customer side of item-list bidding: create, view, edit and cancel a list.
  * Broadcast to stores and store bids live in their own modules (W5, W6).
  */
-import type { ItemListStatus, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/auth/password-check";
@@ -31,7 +31,7 @@ type Actor = { id: string; email?: string | null };
 const listInclude = {
   lines: { orderBy: { sortOrder: "asc" } },
   order: { select: { orderNumber: true } },
-  _count: { select: { bids: { where: { status: { in: ["PENDING", "ACCEPTED"] } } } } },
+  bids: { where: { status: { in: ["PENDING", "ACCEPTED"] } }, select: { round: true } },
 } satisfies Prisma.ItemListInclude;
 
 type ListRow = Prisma.ItemListGetPayload<{ include: typeof listInclude }>;
@@ -46,11 +46,16 @@ export function serializeList(l: ListRow) {
     radiusKm: l.radiusKm,
     version: l.version,
     expiresAt: l.expiresAt,
+    /** Offer round (1, 2, …): the list restarts when a round ends without an accept. */
+    round: l.round,
+    /** When the current round's offer window ends (same as expiresAt). */
+    roundEndsAt: l.expiresAt,
+    roundStartedAt: l.roundStartedAt ?? l.createdAt,
     createdAt: l.createdAt,
     updatedAt: l.updatedAt,
     address: l.addressSnapshot,
     orderNumber: l.order?.orderNumber ?? null,
-    offerCount: l._count.bids,
+    offerCount: l.bids.filter((b) => b.round === l.round).length,
     lines: l.lines.map((x) => ({
       id: x.id,
       name: x.name,
@@ -65,14 +70,14 @@ export function serializeList(l: ListRow) {
 
 export type SerializedList = ReturnType<typeof serializeList>;
 
-/** Lazily close a list whose bidding window has passed. */
-async function expireIfDue<T extends { id: string; status: ItemListStatus; expiresAt: Date }>(l: T): Promise<T> {
-  if (l.status !== "BIDDING" || l.expiresAt.getTime() > Date.now()) return l;
-  const r = await prisma.itemList.updateMany({ where: { id: l.id, status: "BIDDING" }, data: { status: "EXPIRED" } });
-  if (r.count) {
-    await prisma.storeBid.updateMany({ where: { listId: l.id, status: "PENDING" }, data: { status: "NOT_SELECTED" } });
-  }
-  return { ...l, status: "EXPIRED" };
+/** Advance this customer's lists whose round has ended (restart or expire), before showing them. */
+async function tickDueCustomerLists(customerId: string) {
+  const due = await prisma.itemList.findMany({
+    where: { customerId, status: "BIDDING", expiresAt: { lte: new Date() } },
+    select: { id: true },
+    take: 20,
+  });
+  for (const d of due) await tickList(d.id).catch((e) => console.error("[lists] tick", e));
 }
 
 async function assertCatalogRefs(lines: ListLineInput[]) {
@@ -171,19 +176,28 @@ export async function getCustomerList(actor: Actor, id: string) {
   // C-09: widen / expire on read when due (no always-on scheduler).
   await tickList(id).catch((e) => console.error("[lists] tick", e));
   const row = await prisma.itemList.findUniqueOrThrow({ where: { id }, include: listInclude });
-  const list = serializeList(await expireIfDue(row));
+  const list = serializeList(row);
   // E-01: the store offers on this list (owner only; withdrawn offers hidden).
   return { ...list, offers: await offersForList(id) };
 }
 
 export async function listCustomerLists(actor: Actor, opts: { skip: number; take: number }) {
   const where = { customerId: actor.id };
+  await tickDueCustomerLists(actor.id);
   const [total, rows] = await Promise.all([
     prisma.itemList.count({ where }),
     prisma.itemList.findMany({ where, include: listInclude, orderBy: { createdAt: "desc" }, skip: opts.skip, take: opts.take }),
   ]);
-  const items = await Promise.all(rows.map(async (r) => serializeList(await expireIfDue(r))));
+  const items = rows.map(serializeList);
   return { total, items };
+}
+
+async function tickOwned(actor: Actor, id: string) {
+  const owned = await prisma.itemList.findFirst({
+    where: { id, customerId: actor.id, status: "BIDDING", expiresAt: { lte: new Date() } },
+    select: { id: true },
+  });
+  if (owned) await tickList(id).catch((e) => console.error("[lists] tick", e));
 }
 
 /** Lock the list row and check it still belongs to the customer and is open for edits. */
@@ -216,6 +230,8 @@ export async function notifyBiddingStores(storeIds: string[], listId: string, ty
 
 export async function updateList(actor: Actor, id: string, input: UpdateListInput, meta: RequestMeta = {}) {
   if (input.lines) await assertCatalogRefs(input.lines);
+  // A round that just ended restarts first (the list stays open), instead of "closed".
+  await tickOwned(actor, id);
 
   const { updated, bidStoreIds, previous } = await prisma.$transaction(async (tx) => {
     const list = await lockOpenList(tx, actor, id);
@@ -268,6 +284,7 @@ export async function updateList(actor: Actor, id: string, input: UpdateListInpu
 }
 
 export async function cancelList(actor: Actor, id: string, meta: RequestMeta = {}) {
+  await tickOwned(actor, id);
   const { updated, bidStoreIds } = await prisma.$transaction(async (tx) => {
     const list = await lockOpenList(tx, actor, id);
     await tx.storeBid.updateMany({ where: { listId: id, status: "PENDING" }, data: { status: "NOT_SELECTED" } });

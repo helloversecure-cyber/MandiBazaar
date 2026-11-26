@@ -208,7 +208,8 @@ export async function acceptOffer(
         },
       });
       if (!bid) throw new ListError("OFFER_NOT_FOUND", "Offer not found.", 404, "bidId");
-      if (bid.status !== "PENDING") {
+      // Offers from an earlier round expired when that round ended.
+      if (bid.status !== "PENDING" || bid.round !== list.round) {
         throw new ListError("OFFER_UNAVAILABLE", "This offer is no longer available.", 409, "bidId");
       }
       if (bid.listVersion !== list.version) {
