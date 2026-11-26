@@ -22,6 +22,8 @@ type Row = {
   radiusKm: number;
   createdAt: string;
   expiresAt: string;
+  round: number;
+  roundEndsAt: string;
   acceptedStore: string | null;
   acceptedTotal: number | null;
   order: { orderNumber: string; orderStatus: string } | null;
@@ -148,9 +150,12 @@ export default function AdminItemListsPage() {
               <li key={r.id}>
                 <Link href={`/admin/bidding/lists/${r.id}`} className="block rounded-2xl border border-line bg-card p-4 shadow-card">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge tone={listStatusInfo(r.status).tone} dot>
-                      {statusLabel(r.status)}
-                    </Badge>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <Badge tone={listStatusInfo(r.status).tone} dot>
+                        {statusLabel(r.status)}
+                      </Badge>
+                      <Badge tone="neutral">Round {r.round}</Badge>
+                    </span>
                     <span className="text-xs text-ink-subtle">{new Date(r.createdAt).toLocaleString("en-PK")}</span>
                   </div>
                   <p className="mt-2 font-semibold text-ink">{r.customerName}</p>
@@ -170,6 +175,7 @@ export default function AdminItemListsPage() {
               <thead className="bg-app text-xs uppercase text-ink-subtle">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 text-right font-semibold">Round</th>
                   <th className="px-4 py-3 font-semibold">Customer</th>
                   <th className="px-4 py-3 font-semibold">Area</th>
                   <th className="px-4 py-3 text-right font-semibold">Items</th>
@@ -187,6 +193,14 @@ export default function AdminItemListsPage() {
                           {statusLabel(r.status)}
                         </Badge>
                       </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums" data-testid="list-round-cell">
+                      {r.round}
+                      {r.status === "BIDDING" && (
+                        <span className="block whitespace-nowrap text-xs text-ink-subtle">
+                          ends {new Date(r.roundEndsAt).toLocaleString("en-PK")}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/admin/bidding/lists/${r.id}`} className="whitespace-nowrap font-medium text-ink hover:underline">

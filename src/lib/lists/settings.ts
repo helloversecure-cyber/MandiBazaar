@@ -9,7 +9,10 @@ export type ListSettings = {
   radiusStepKm: number;
   radiusStepMins: number;
   maxStores: number;
+  /** Hours each round stays open for the customer to accept an offer. */
   expiryHours: number;
+  /** Rounds before the list ends as EXPIRED; 0 = restart until accepted or cancelled. */
+  maxRounds: number;
   postPackBidWindowSecs: number;
   postPackRiderRadiusKm: number;
 };
@@ -30,6 +33,7 @@ export async function getListSettings(db: Prisma.TransactionClient | typeof pris
       listRadiusStepMins: true,
       listMaxStores: true,
       listExpiryHours: true,
+      listMaxRounds: true,
       postPackBidWindowSecs: true,
       postPackRiderRadiusKm: true,
     },
@@ -41,7 +45,8 @@ export async function getListSettings(db: Prisma.TransactionClient | typeof pris
     radiusStepKm: s?.listRadiusStepKm ?? 5,
     radiusStepMins: s?.listRadiusStepMins ?? 30,
     maxStores: s?.listMaxStores ?? 20,
-    expiryHours: s?.listExpiryHours ?? 24,
+    expiryHours: s?.listExpiryHours ?? 48,
+    maxRounds: s?.listMaxRounds ?? 0,
     postPackBidWindowSecs: s?.postPackBidWindowSecs ?? 300,
     postPackRiderRadiusKm: s?.postPackRiderRadiusKm ?? 10,
   };

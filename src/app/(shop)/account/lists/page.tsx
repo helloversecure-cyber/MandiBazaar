@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
-import { Countdown, ListStatusBadge } from "@/components/lists/ListBits";
+import { Countdown, ListStatusBadge, RoundBadge } from "@/components/lists/ListBits";
 import { useListBidding } from "@/components/lists/useListBidding";
 import type { ListSummary } from "@/components/lists/types";
 import { plural } from "@/lib/portal/format";
@@ -89,6 +89,7 @@ function MyListsContent() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <ListStatusBadge status={l.status} />
+                      {(l.status === "BIDDING" || l.round > 1) && <RoundBadge round={l.round} />}
                       <span className="text-xs text-ink-subtle">{new Date(l.createdAt).toLocaleString()}</span>
                     </div>
                     <p className="mt-1.5 truncate font-semibold text-ink">
@@ -100,7 +101,7 @@ function MyListsContent() {
                       {l.status === "BIDDING" && (
                         <>
                           <span className="font-semibold text-brand-700 dark:text-brand-300">{plural(l.offerCount, "offer")}</span>
-                          <Countdown until={l.expiresAt} />
+                          <Countdown until={l.roundEndsAt ?? l.expiresAt} />
                         </>
                       )}
                       {l.orderNumber && <span>Order {l.orderNumber}</span>}

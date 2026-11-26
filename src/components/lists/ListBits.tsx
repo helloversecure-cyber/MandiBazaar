@@ -18,6 +18,16 @@ export function ListStatusBadge({ status, className }: { status: string; classNa
   );
 }
 
+/** "Round 2": the list restarted after a round ended without an accept. */
+export function RoundBadge({ round, className }: { round: number | null | undefined; className?: string }) {
+  if (!round) return null;
+  return (
+    <Badge tone="neutral" className={className}>
+      <span data-testid="list-round">Round {round}</span>
+    </Badge>
+  );
+}
+
 /** Ticking "1h 05m left" until `until`; calls onEnd once when it reaches zero. */
 export function Countdown({ until, onEnd, className }: { until: string; onEnd?: () => void; className?: string }) {
   const end = new Date(until).getTime();

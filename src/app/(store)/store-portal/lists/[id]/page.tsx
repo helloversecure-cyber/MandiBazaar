@@ -7,7 +7,7 @@ import { ArrowLeft, CheckCircle2, Clock, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useConfirm, useToast } from "@/components/ui/feedback";
-import { Countdown } from "@/components/lists/ListBits";
+import { Countdown, RoundBadge } from "@/components/lists/ListBits";
 import { formatQty } from "@/lib/lists/ui";
 import {
   applyServerBidError,
@@ -181,13 +181,16 @@ export default function StoreListBidPage() {
 
       <header className="mt-3 rounded-2xl border border-line bg-card p-4 shadow-card sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Badge tone={state.tone} dot>
-            {state.label}
-          </Badge>
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge tone={state.tone} dot>
+              {state.label}
+            </Badge>
+            {open && <RoundBadge round={list.round} />}
+          </span>
           {open && (
             <span className="flex items-center gap-1 text-sm font-medium text-ink-muted">
               <Clock className="h-4 w-4" />
-              <Countdown until={list.expiresAt} onEnd={() => void load()} />
+              <Countdown until={list.roundEndsAt ?? list.expiresAt} onEnd={() => void load()} />
             </span>
           )}
         </div>

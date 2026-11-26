@@ -20,6 +20,8 @@ type Detail = {
   version: number;
   createdAt: string;
   expiresAt: string;
+  round: number;
+  roundEndsAt: string;
   cancelledAt: string | null;
   customer: { fullName: string; email: string | null; phone: string | null };
   lines: { id: string; name: string; quantity: number; unit: string; category: string | null; note: string | null }[];
@@ -32,6 +34,7 @@ type Detail = {
     sentAt: string;
     seenAt: string | null;
     declinedAt: string | null;
+    round: number;
   }[];
   bids: {
     id: string;
@@ -45,6 +48,7 @@ type Detail = {
     prepMinutes: number | null;
     note: string | null;
     listVersion: number;
+    round: number;
     outdated: boolean;
     createdAt: string;
     updatedAt: string;
@@ -54,7 +58,13 @@ type Detail = {
   history: { at: string; action: string; by: string; store: string | null }[];
 };
 
-const BID_TONE: Record<string, BadgeTone> = { PENDING: "info", ACCEPTED: "success", NOT_SELECTED: "neutral", WITHDRAWN: "neutral" };
+const BID_TONE: Record<string, BadgeTone> = {
+  PENDING: "info",
+  ACCEPTED: "success",
+  NOT_SELECTED: "neutral",
+  WITHDRAWN: "neutral",
+  EXPIRED: "warning",
+};
 const when = (d: string | null) => (d ? new Date(d).toLocaleString("en-PK") : "—");
 const human = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
@@ -119,6 +129,7 @@ export default function AdminListDetailPage() {
               <Badge tone={listStatusInfo(d.status).tone} dot>
                 {d.status === "BIDDING" ? "Bidding" : d.status === "ACCEPTED" ? "Offer accepted" : listStatusInfo(d.status).label}
               </Badge>
+              <Badge tone="neutral">Round {d.round}</Badge>
               <span className="text-xs text-ink-subtle">Version {d.version}</span>
               {(d.status === "BIDDING" || d.status === "NO_STORES") && (
                 <button
@@ -134,8 +145,8 @@ export default function AdminListDetailPage() {
             </div>
             <h1 className="mt-2 font-display text-2xl text-ink">List from {d.customer.fullName}</h1>
             <p className="mt-1 break-words text-sm text-ink-muted">
-              {[d.area, d.city].filter(Boolean).join(", ")} · radius {d.radiusKm} km · sent {when(d.createdAt)} · closes{" "}
-              {when(d.expiresAt)}
+              {[d.area, d.city].filter(Boolean).join(", ")} · radius {d.radiusKm} km · sent {when(d.createdAt)} · {d.status === "BIDDING" ? `round ${d.round} ends` : "closed round"}{" "}
+              {when(d.roundEndsAt ?? d.expiresAt)}
               {d.cancelledAt ? ` · cancelled ${when(d.cancelledAt)}` : ""}
             </p>
             {d.order && (
@@ -174,7 +185,9 @@ export default function AdminListDetailPage() {
                   <span className="text-ink-muted">
                     {b.distanceKm != null ? `${b.distanceKm.toFixed(1)} km` : "same city"} · radius {b.radiusKm} km
                   </span>
-                  <span className="text-ink-muted">Sent {when(b.sentAt)}</span>
+                  <span className="text-ink-muted">
+                    Sent {when(b.sentAt)} · round {b.round}
+                  </span>
                   <span className="text-ink-muted">
                     {b.declinedAt ? `Can't supply (${when(b.declinedAt)})` : b.seenAt ? `Seen ${when(b.seenAt)}` : "Not opened yet"}
                   </span>
@@ -199,7 +212,7 @@ export default function AdminListDetailPage() {
                   <p className="mt-1 text-sm text-ink-muted">
                     {formatCurrency(b.total)} · {b.coveredCount} of {d.lines.length} items
                     {b.discount > 0 ? ` · discount ${formatCurrency(b.discount)}` : ""}
-                    {b.prepMinutes != null ? ` · ${b.prepMinutes} min` : ""} · list v{b.listVersion}
+                    {b.prepMinutes != null ? ` · ${b.prepMinutes} min` : ""} · list v{b.listVersion} · round {b.round}
                   </p>
                   <p className="text-xs text-ink-subtle">
                     First sent {when(b.createdAt)} · last change {when(b.updatedAt)}

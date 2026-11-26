@@ -159,7 +159,8 @@ describeDb("list broadcast", () => {
     expect(ok.status).toBe(200);
   });
 
-  it("an expired list is closed by the tick", async () => {
+  it("an expired list is closed by the tick (at max rounds)", async () => {
+    await prisma.storeSettings.updateMany({ data: { listMaxRounds: 1 } });
     const l = await groceryList();
     await prisma.itemList.update({ where: { id: l.id }, data: { expiresAt: minutes(-1) } });
     expect(await tickList(l.id)).toBe("EXPIRED");

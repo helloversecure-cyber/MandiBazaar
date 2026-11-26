@@ -104,8 +104,11 @@ describeDb("lists service", () => {
     ]);
     expect(l.city).toBe("Lahore");
     const hours = (new Date(l.expiresAt).getTime() - Date.now()) / 3600_000;
-    expect(hours).toBeGreaterThan(23.9);
-    expect(hours).toBeLessThanOrEqual(24);
+    // Owner rule: 48 h offer window, round 1.
+    expect(hours).toBeGreaterThan(47.9);
+    expect(hours).toBeLessThanOrEqual(48);
+    expect(l.round).toBe(1);
+    expect(l.roundEndsAt).toEqual(l.expiresAt);
   });
 
   it("feature switch: off for the public, on for beta testers", async () => {
@@ -231,7 +234,8 @@ describeDb("lists service", () => {
     await expect(create()).rejects.toMatchObject({ code: "RATE_LIMITED", status: 429 });
   });
 
-  it("a list past its deadline shows as EXPIRED and can't be edited", async () => {
+  it("at the last round (max rounds), a list past its deadline shows as EXPIRED and can't be edited", async () => {
+    await prisma.storeSettings.updateMany({ data: { listMaxRounds: 1 } });
     const l = await create();
     await prisma.itemList.update({ where: { id: l.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
     expect((await getCustomerList(A(), l.id)).status).toBe("EXPIRED");
