@@ -38,6 +38,7 @@ const FIELD_KEYS = [
   "price",
   "salePrice",
   "stockQuantity",
+  "lowStockThreshold",
   "unit",
 ] as const;
 
@@ -71,6 +72,8 @@ function pickFields(body: Record<string, unknown>) {
   for (const k of FIELD_KEYS) {
     if (body[k] !== undefined) out[k] = body[k];
   }
+  // Optional number: a blank box means "keep the current / default value".
+  if (out.lowStockThreshold === "" || out.lowStockThreshold === null) delete out.lowStockThreshold;
   return out;
 }
 
@@ -204,6 +207,7 @@ export async function createStoreProduct(
       reviewBasePrice: data.price,
       unit: data.unit,
       stockQuantity: data.stockQuantity,
+      ...(data.lowStockThreshold !== undefined ? { lowStockThreshold: data.lowStockThreshold } : {}),
       // Store-created listings always need MandiBazaar approval first
       status: "DRAFT",
       isOrganic,
@@ -357,6 +361,9 @@ export async function updateStoreProduct(
   const direct: Record<string, unknown> = {};
   if (input.stockQuantity !== undefined && input.stockQuantity !== product.stockQuantity) {
     direct.stockQuantity = input.stockQuantity;
+  }
+  if (input.lowStockThreshold !== undefined && input.lowStockThreshold !== product.lowStockThreshold) {
+    direct.lowStockThreshold = input.lowStockThreshold;
   }
   if (input.urduName !== undefined && (input.urduName || null) !== (product.urduName || null)) {
     direct.urduName = input.urduName || null;

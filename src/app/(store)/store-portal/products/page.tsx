@@ -47,6 +47,7 @@ type Product = {
   price: number;
   salePrice: number | null;
   stockQuantity: number;
+  lowStockThreshold?: number;
   reservedStock?: number;
   status: string;
   isOrganic: boolean;
@@ -99,6 +100,7 @@ function StoreProductsPage() {
   const [unitName, setUnitName] = useState<ProductUnit | "">("pc");
   const [legacyUnit, setLegacyUnit] = useState("");
   const [stock, setStock] = useState("10");
+  const [lowStock, setLowStock] = useState("5");
   const [categoryId, setCategoryId] = useState("");
   const [useOtherCategory, setUseOtherCategory] = useState(false);
   const [customCategoryName, setCustomCategoryName] = useState("");
@@ -238,6 +240,7 @@ function StoreProductsPage() {
     setSalePrice(sale != null ? String(sale) : "");
     applyUnit(pc?.unit ?? p.unit);
     setStock(String(p.stockQuantity));
+    setLowStock(String(p.lowStockThreshold ?? 5));
     setProductType(p.isOrganic ? "organic" : "inorganic");
     setFreeDelivery(Boolean(p.freeDelivery));
     setImageUrls(urls);
@@ -274,6 +277,7 @@ function StoreProductsPage() {
     setProductType("organic");
     setFreeDelivery(false);
     setStock("10");
+    setLowStock("5");
     setUnitSize("1");
     setUnitName("pc");
     setLegacyUnit("");
@@ -302,6 +306,7 @@ function StoreProductsPage() {
       price: price.trim(),
       salePrice: salePrice.trim() === "" ? null : salePrice.trim(),
       stockQuantity: stock.trim(),
+      lowStockThreshold: lowStock.trim() === "" ? undefined : lowStock.trim(),
       unit: unitValue,
     };
     const ok = fe.check(storeProductCreateSchema, values);
@@ -411,6 +416,7 @@ function StoreProductsPage() {
       salePrice: salePrice.trim() ? Number(salePrice) : null,
       unit: unitValue,
       stockQuantity: Number(stock),
+      lowStockThreshold: lowStock.trim() === "" ? undefined : Number(lowStock),
       categoryId: useOtherCategory ? undefined : categoryId,
       customCategoryName: useOtherCategory ? customCategoryName.trim() : undefined,
       isOrganic,
@@ -1012,6 +1018,27 @@ function StoreProductsPage() {
               cannot go below that.
             </p>
           )}
+        </div>
+
+        <div>
+          <FieldLabel htmlFor="product-low-stock">Low-stock alert</FieldLabel>
+          <input
+            id="product-low-stock"
+            className={inputCls(fe.has("lowStockThreshold"))}
+            placeholder="e.g. 5"
+            type="number"
+            inputMode="numeric"
+            min={PRODUCT_LIMITS.lowStockMin}
+            max={PRODUCT_LIMITS.lowStockMax}
+            step={1}
+            value={lowStock}
+            onChange={(e) => {
+              setLowStock(e.target.value);
+              fe.clear("lowStockThreshold");
+            }}
+          />
+          <FieldError message={fe.get("lowStockThreshold")} />
+          <p className="mt-1 text-xs text-ink-subtle">We warn you when stock falls to this number or below.</p>
         </div>
 
         <div className="space-y-2 md:col-span-2">

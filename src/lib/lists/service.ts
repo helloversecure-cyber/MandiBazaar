@@ -203,7 +203,8 @@ async function lockOpenList(tx: Prisma.TransactionClient, actor: Actor, id: stri
   return list;
 }
 
-async function notifyBiddingStores(storeIds: string[], listId: string, type: string, title: string, body: string) {
+/** In-app note to the owners of the given stores (stores that bid on a list). */
+export async function notifyBiddingStores(storeIds: string[], listId: string, type: string, title: string, body: string) {
   if (!storeIds.length) return;
   const stores = await prisma.store.findMany({ where: { id: { in: storeIds } }, select: { ownerId: true } });
   await Promise.all(

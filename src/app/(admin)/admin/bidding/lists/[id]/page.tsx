@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { BiddingTabs } from "@/components/admin/BiddingTabs";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { useConfirm, useToast } from "@/components/ui/feedback";
 import { formatQty, listStatusInfo } from "@/lib/lists/ui";
 import { formatCurrency } from "@/lib/utils";
 
@@ -61,6 +62,39 @@ export default function AdminListDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [d, setD] = useState<Detail | null>(null);
   const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const confirm = useConfirm();
+  const toast = useToast();
+
+  async function cancelList() {
+    if (!d) return;
+    const r = await confirm({
+      title: "Cancel this list?",
+      message: "Stores can no longer send offers. Open offers are closed and the customer and the stores that bid are told.",
+      confirmLabel: "Cancel list",
+      cancelLabel: "Keep list",
+      tone: "danger",
+      reason: { label: "Reason (shown to the customer)", placeholder: "e.g. Duplicate list", required: true, minLength: 5, maxLength: 500 },
+    });
+    if (!r.confirmed) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/admin/lists/${encodeURIComponent(d.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CANCEL", reason: r.reason }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j.success) {
+        setD(j.data);
+        toast.success("List cancelled");
+      } else toast.error(j.error || "Couldn't cancel the list");
+    } catch {
+      toast.error("Couldn't cancel the list");
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/admin/lists/${encodeURIComponent(id)}`, { cache: "no-store" })
@@ -86,6 +120,17 @@ export default function AdminListDetailPage() {
                 {d.status === "BIDDING" ? "Bidding" : d.status === "ACCEPTED" ? "Offer accepted" : listStatusInfo(d.status).label}
               </Badge>
               <span className="text-xs text-ink-subtle">Version {d.version}</span>
+              {(d.status === "BIDDING" || d.status === "NO_STORES") && (
+                <button
+                  type="button"
+                  onClick={cancelList}
+                  disabled={cancelling}
+                  data-testid="admin-cancel-list"
+                  className="ml-auto min-h-[44px] rounded-xl border border-red-300 px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+                >
+                  {cancelling ? "Cancelling…" : "Cancel list"}
+                </button>
+              )}
             </div>
             <h1 className="mt-2 font-display text-2xl text-ink">List from {d.customer.fullName}</h1>
             <p className="mt-1 break-words text-sm text-ink-muted">

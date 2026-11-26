@@ -24,6 +24,9 @@ export const PRODUCT_LIMITS = {
   priceMax: 1_000_000,
   stockMin: 0,
   stockMax: 100_000,
+  /** "Low stock" warning level the store sets per product (Android app reads it). */
+  lowStockMin: 0,
+  lowStockMax: 1000,
   packSizeMin: 0.001,
   packSizeMax: 10_000,
   maxImages: 5,
@@ -167,6 +170,7 @@ function zWholeRupees(label: string) {
 }
 
 const stockMsg = "Stock must be a whole number from 0 to 100,000";
+const lowStockMsg = "Low-stock alert must be a whole number from 0 to 1,000";
 
 export const productFieldRules = {
   name: z.preprocess(
@@ -226,6 +230,19 @@ export const productFieldRules = {
         { message: stockMsg }
       )
   ),
+  lowStockThreshold: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? Number(v) : v),
+    z
+      .number({ message: lowStockMsg })
+      .refine(
+        (v) =>
+          Number.isFinite(v) &&
+          Number.isInteger(v) &&
+          v >= PRODUCT_LIMITS.lowStockMin &&
+          v <= PRODUCT_LIMITS.lowStockMax,
+        { message: lowStockMsg }
+      )
+  ),
   unit: z
     .unknown()
     .transform((v, ctx) => {
@@ -248,6 +265,7 @@ export const storeProductCreateSchema = z
     price: productFieldRules.price,
     salePrice: productFieldRules.salePrice.optional(),
     stockQuantity: productFieldRules.stockQuantity,
+    lowStockThreshold: productFieldRules.lowStockThreshold.optional(),
     unit: productFieldRules.unit,
   })
   .superRefine((d, ctx) => {
@@ -269,6 +287,7 @@ export const storeProductUpdateSchema = z.object({
   price: productFieldRules.price.optional(),
   salePrice: productFieldRules.salePrice.optional(),
   stockQuantity: productFieldRules.stockQuantity.optional(),
+  lowStockThreshold: productFieldRules.lowStockThreshold.optional(),
   unit: productFieldRules.unit.optional(),
 });
 
