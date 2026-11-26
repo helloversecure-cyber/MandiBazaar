@@ -206,7 +206,7 @@ function BrandedHero({
             <Link
               key={p.href}
               href={p.href}
-              className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-white/20"
+              className="inline-flex items-center justify-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-white/20"
             >
               {p.label}
             </Link>

@@ -119,6 +119,22 @@ const EMPTY_SUMMARY: Summary = {
 /** Cart-level problems send the customer back to the cart with the reason (QA M9/U4). */
 const BACK_TO_CART_CODES = ["EMPTY_CART", "CART_ISSUES", "CART_CHANGED", "MIN_ORDER"];
 
+/**
+ * L-03: below lg the summary sits under the form, so each step's buttons and the amount
+ * payable now are pinned just above the bottom nav (MobileNav, 3.5rem + safe area).
+ */
+function StepActions({ payable, children }: { payable: string; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line bg-card px-4 py-3 shadow-card lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+      <p className="mr-auto text-xs text-ink-muted lg:hidden">
+        <span className="block">Payable now</span>
+        <span className="block text-base font-bold text-ink">{payable}</span>
+      </p>
+      <div className="ml-auto flex gap-3 lg:ml-0">{children}</div>
+    </div>
+  );
+}
+
 export default function CheckoutPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -739,7 +755,7 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px] lg:gap-8">
+      <div className="grid grid-cols-1 gap-6 pb-24 lg:grid-cols-[1fr_300px] lg:gap-8 lg:pb-0">
         <div className="min-w-0 rounded-2xl border border-line bg-card p-5 shadow-card sm:p-6">
           {step === 1 && (
             <div className="space-y-4">
@@ -803,7 +819,9 @@ export default function CheckoutPage() {
                 />
                 <FieldError message={fe.get("email")} />
               </div>
-              <Button onClick={goToStep2}>Continue</Button>
+              <StepActions payable={formatCurrency(onlineAmount)}>
+                <Button onClick={goToStep2}>Continue</Button>
+              </StepActions>
             </div>
           )}
 
@@ -1041,12 +1059,12 @@ export default function CheckoutPage() {
                   </div>
                 </div>
               )}
-              <div className="flex gap-3">
+              <StepActions payable={formatCurrency(onlineAmount)}>
                 <Button variant="outline" onClick={() => setStep(1)}>
                   Back
                 </Button>
                 <Button onClick={goToStep3}>Continue</Button>
-              </div>
+              </StepActions>
             </div>
           )}
 
@@ -1121,12 +1139,12 @@ export default function CheckoutPage() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
-              <div className="flex gap-3">
+              <StepActions payable={formatCurrency(onlineAmount)}>
                 <Button variant="outline" onClick={() => setStep(2)}>
                   Back
                 </Button>
                 <Button onClick={() => void goToStep4()}>Continue to payment</Button>
-              </div>
+              </StepActions>
             </div>
           )}
 
@@ -1329,7 +1347,7 @@ export default function CheckoutPage() {
                     </p>
                   )}
 
-                  <div className="flex gap-3">
+                  <StepActions payable={formatCurrency(onlineAmount)}>
                     <Button variant="outline" onClick={() => setStep(3)} disabled={processing}>
                       Back
                     </Button>
@@ -1347,7 +1365,7 @@ export default function CheckoutPage() {
                               : "Continue to card details"
                           : "Confirm order"}
                     </Button>
-                  </div>
+                  </StepActions>
                 </>
               )}
             </div>
