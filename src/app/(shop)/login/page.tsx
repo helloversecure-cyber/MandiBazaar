@@ -157,7 +157,7 @@ function LoginForm() {
           </div>
           {showForgot && (
             <p className="text-right text-xs">
-              <Link href="/forgot-password" className="font-medium text-brand-600 hover:text-brand-700">
+              <Link href="/forgot-password" className="font-medium text-brand-600 hover:text-brand-700 max-md:inline-flex max-md:items-center">
                 Forgot password?
               </Link>
             </p>
@@ -210,7 +210,7 @@ function LoginForm() {
       <div className="mt-4 space-y-1.5 text-center text-xs text-ink-subtle">
         {portal !== "admin" && portal !== "rider" && (
           <p>
-            <Link href="/store" className="text-brand-600 hover:underline">
+            <Link href="/store" className="text-brand-600 hover:underline max-md:inline-flex max-md:items-center">
               Sell on MandiBazaar — Store
             </Link>
           </p>

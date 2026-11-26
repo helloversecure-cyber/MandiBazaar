@@ -7,7 +7,7 @@ import { getSiteInfo } from "@/lib/shop/site-info";
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const site = await getSiteInfo();
   return (
-    <div className="flex min-h-screen flex-col bg-app">
+    <div className="shop-tap-targets flex min-h-screen flex-col bg-app">
       <Header
         freeDeliveryThreshold={site.freeDeliveryThreshold}
         ratePerKm={site.ratePerKm}

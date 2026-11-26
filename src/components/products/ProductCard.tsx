@@ -290,7 +290,7 @@ export function ProductCard({
             onClick={toggleWishlist}
             disabled={savingWish}
             className={cn(
-              "absolute right-2 top-2 rounded-full bg-card/95 p-1.5 shadow-md transition hover:scale-110",
+              "absolute right-2 top-2 flex items-center justify-center rounded-full bg-card/95 p-1.5 shadow-md transition hover:scale-110",
               saved ? "text-deal-500" : "text-ink-subtle hover:text-deal-500"
             )}
             aria-label={saved ? "Remove from wishlist" : "Save to wishlist"}
@@ -305,12 +305,12 @@ export function ProductCard({
         {!compact && product.store?.name && (
           <Link
             href={`/stores/${product.store.slug}`}
-            className="mb-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-brand-500 hover:underline"
+            className="mb-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-brand-500 hover:underline max-md:leading-[44px]"
           >
             {product.store.name}
           </Link>
         )}
-        <Link href={productHref}>
+        <Link href={productHref} className="max-md:flex max-md:items-center">
           <h3
             className={cn(
               "line-clamp-2 font-bold leading-snug text-ink transition group-hover:text-brand-700",
