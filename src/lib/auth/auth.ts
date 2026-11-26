@@ -8,13 +8,9 @@ import {
   isRiderRole,
   isStorePortalRole,
 } from "@/lib/auth/permissions";
-import { writeAuditLog } from "@/lib/audit";
-import {
-  portalAccessError,
-  requestMetaFromHeaders,
-  verifyPasswordWithLockout,
-  type RequestMeta,
-} from "@/lib/auth/password-check";
+import { requestMetaFromHeaders, type RequestMeta } from "@/lib/auth/password-check";
+import { signInWithPassword, storeOwnerApproved } from "@/lib/auth/sign-in";
+import { sessionFromBearer } from "@/lib/auth/mobile-tokens";
 
 type ReqLike = { headers?: Record<string, unknown> | Headers } | undefined;
 
@@ -54,69 +50,7 @@ export const authOptions: NextAuthOptions = {
         portal: { label: "Portal", type: "text" },
       },
       async authorize(credentials, req) {
-        if (!credentials?.identifier || !credentials?.password) {
-          throw new Error("Please provide login credentials");
-        }
-        const meta = requestMeta(req);
-
-        // Same lookup + lockout counting as POST /api/auth/2fa/start
-        const user = await verifyPasswordWithLockout(credentials.identifier, credentials.password, meta);
-
-        const portal = credentials.portal || "customer";
-        const portalError = portalAccessError(portal, user.role.name);
-        if (portalError) throw new Error(portalError);
-        // A store owner whose store isn't approved can still sign in (like a
-        // pending rider) so they land on the Pending Approval screen. Access to
-        // the dashboard and the customer site is gated by middleware + the
-        // store-portal layout, never by a login error.
-        if (portal === "rider") {
-          const rider = await prisma.rider.findUnique({
-            where: { userId: user.id },
-          });
-          if (!rider) {
-            throw new Error(
-              "Rider profile not linked. Contact MandiBazaar."
-            );
-          }
-          if (rider.approvalStatus === "REJECTED") {
-            throw new Error(
-              rider.reviewNotes
-                ? `Application rejected: ${rider.reviewNotes}`
-                : "Rider application was rejected. Contact MandiBazaar."
-            );
-          }
-          // PENDING riders can login to see approval status; APPROVED can work
-        }
-
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            failedLoginAttempts: 0,
-            lockedUntil: null,
-            lastLoginAt: new Date(),
-          },
-        });
-
-        // QA I2: record every admin / staff sign-in
-        if (isPlatformAdminRole(user.role.name)) {
-          await writeAuditLog({
-            userId: user.id,
-            action: "ADMIN_SIGN_IN",
-            entity: "User",
-            entityId: user.id,
-            newValue: { role: user.role.name, portal },
-            ...meta,
-          }).catch((e) => console.error("[auth] audit failed", e));
-        }
-
-        return {
-          id: user.id,
-          email: user.email || user.phone || user.id,
-          name: user.fullName,
-          phone: user.phone,
-          role: user.role.name,
-          mustChangePassword: user.mustChangePassword,
-        };
+        return signInWithPassword(credentials ?? {}, requestMeta(req));
       },
     }),
   ],
@@ -170,16 +104,7 @@ export const authOptions: NextAuthOptions = {
       // flag flips automatically once MandiBazaar approves their store.
       if (token.id && token.role === "STORE_OWNER") {
         if (token.storeApproved !== true) {
-          const approved = await prisma.store.count({
-            where: {
-              status: "APPROVED",
-              OR: [
-                { ownerId: token.id as string },
-                { members: { some: { userId: token.id as string, isActive: true } } },
-              ],
-            },
-          });
-          token.storeApproved = approved > 0;
+          token.storeApproved = await storeOwnerApproved(token.id as string);
         }
       } else {
         token.storeApproved = true;
@@ -203,8 +128,23 @@ export const authOptions: NextAuthOptions = {
     "discount-price-dev-secret-change-in-production",
 };
 
-export function getSession() {
-  return getServerSession(authOptions);
+/**
+ * The signed-in session: the website's NextAuth cookie, or — for the Android
+ * app — an `Authorization: Bearer <access token>` header (see mobile-tokens.ts).
+ * Both resolve to the same session shape, so every requireX() guard below
+ * applies the same role checks to the app.
+ */
+export async function getSession() {
+  const session = await getServerSession(authOptions);
+  if (session?.user?.id) return session;
+  try {
+    const { headers } = await import("next/headers");
+    const auth = headers().get("authorization");
+    if (auth) return await sessionFromBearer(auth);
+  } catch {
+    // Called outside a request (scripts, tests): no header to read.
+  }
+  return session;
 }
 
 export async function requireAuth() {

@@ -28,7 +28,9 @@ export default function AccountLayoutClient({ children }: { children: React.Reac
 
   return (
     <ShopContainer width="xl">
-      <div className="grid gap-6 lg:grid-cols-[260px_1fr] lg:gap-8">
+      {/* grid-cols-1 (minmax(0,1fr)) keeps the single mobile/tablet column at screen
+          width; without it the column grows to the scrolling tab row (~1070px at 768). */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr] lg:gap-8">
         <AccountSidebar />
         <div className="min-w-0">{children}</div>
       </div>
