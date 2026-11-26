@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { apiError, apiSuccess, toUserMessage } from "@/lib/utils";
 import { ensureCategoriesFromNames } from "@/lib/catalog/requested-categories";
 import { StoreStatus } from "@prisma/client";
+import { haversineKm } from "@/lib/orders/delivery-fee";
 // D2 (GET + PATCH): admin list, approval guard, reasons, notifications
 import {
   handleStoreDecision,
@@ -34,6 +35,40 @@ const PUBLIC_STORE_SELECT = {
   createdAt: true,
   _count: { select: { products: true } },
 } as const;
+
+/**
+ * Approved, non-virtual stores with a map pin within radiusKm (default 10, max 50)
+ * of lat/lng, nearest first. Returns the public fields plus distanceKm rounded to
+ * 0.1 km; the store's own coordinates are never returned.
+ */
+async function nearbyStores(sp: URLSearchParams, page: number, limit: number) {
+  const lat = Number(sp.get("lat"));
+  const lng = Number(sp.get("lng"));
+  if (!sp.get("lat") || !sp.get("lng") || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return apiError("lat and lng must be valid coordinates", 400, "VALIDATION");
+  }
+  const radiusRaw = Number(sp.get("radiusKm") || "10");
+  const radiusKm = Number.isFinite(radiusRaw) ? Math.min(50, Math.max(0.5, radiusRaw)) : 10;
+
+  const stores = await prisma.store.findMany({
+    where: { status: "APPROVED", isVirtual: false, latitude: { not: null }, longitude: { not: null } },
+    select: { ...PUBLIC_STORE_SELECT, latitude: true, longitude: true },
+  });
+  const near = stores
+    .map(({ latitude, longitude, ...pub }) => ({
+      ...pub,
+      distanceKm: Math.round(haversineKm(lat, lng, Number(latitude), Number(longitude)) * 10) / 10,
+    }))
+    .filter((s) => s.distanceKm <= radiusKm)
+    .sort((a, b) => a.distanceKm - b.distanceKm || a.name.localeCompare(b.name));
+
+  const total = near.length;
+  return apiSuccess({
+    items: near.slice((page - 1) * limit, page * limit),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    radiusKm,
+  });
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -71,6 +106,9 @@ export async function GET(req: NextRequest) {
       });
       return apiSuccess({ items: stores });
     }
+
+    // Nearby stores for the app home: ?lat=&lng=&radiusKm= (public, nearest first).
+    if (sp.has("lat") || sp.has("lng")) return nearbyStores(sp, page, limit);
 
     const session = await getSession();
     const isSuper = session?.user?.role === "SUPER_ADMIN";

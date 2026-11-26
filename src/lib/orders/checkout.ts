@@ -763,14 +763,18 @@ export async function createCheckoutOrder(input: CheckoutInput) {
       include: { items: true, payments: true, customer: true },
     });
 
-    // Rider bidding: lock in the chosen rider + their fee, and link the auction
-    // to this order so it can't be reused.
+    // Rider bidding: lock in the chosen rider, and link the auction to this order
+    // so it can't be reused. NEW-01 "the rider keeps the delivery fee": the platform
+    // only pays out the part of the fee paid ONLINE. On full cash on delivery the
+    // rider collects the fee in cash, so riderFee stays null here and
+    // recordRiderFeeForOrder fixes it at delivery (online part = Rs 0). Setting the
+    // bid amount here would pay the rider twice (cash + payout).
     if (acceptedBid) {
       await tx.delivery.create({
         data: {
           orderId: created.id,
           riderId: acceptedBid.riderId,
-          riderFee: acceptedBid.fee,
+          riderFee: fullCod ? null : acceptedBid.fee,
         },
       });
       await linkRequestToOrder(tx, acceptedBid.requestId, created.id);
