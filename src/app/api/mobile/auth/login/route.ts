@@ -1,4 +1,5 @@
 import { signInWithPassword } from "@/lib/auth/sign-in";
+import { isPlatformAdminRole } from "@/lib/auth/permissions";
 import { requestMetaFromHeaders } from "@/lib/auth/password-check";
 import { buildMobileSession } from "@/lib/auth/mobile-session-response";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -42,6 +43,10 @@ export async function POST(req: Request) {
     const status = /^Unauthorized .* access$/.test(msg) ? 403 : msg.startsWith("Something went wrong") ? 500 : 401;
     if (status === 500) console.error("[mobile-login]", e);
     return apiError(msg, status, status === 403 ? "WRONG_PORTAL" : status === 401 ? "SIGN_IN_FAILED" : undefined);
+  }
+  // The customer portal accepts every role on the website; the app never issues admin tokens.
+  if (isPlatformAdminRole(user.role)) {
+    return apiError("Admins sign in on the website.", 403, "PORTAL_NOT_IN_APP");
   }
 
   try {
