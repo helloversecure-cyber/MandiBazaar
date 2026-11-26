@@ -60,6 +60,19 @@ html {
   }
 }
 
+/* L-09 (docs/plans/test-cases.md): on phones every shop control is at least 44 × 44 px.
+   Scoped to the shop layout. Links inside running text stay as they are (min-height
+   does not apply to inline boxes); standalone inline links opt in with max-md:inline-flex. */
+@layer components {
+  @media (max-width: 767.98px) {
+    .shop-tap-targets
+      :where(a[href], button, [role="button"], select, input:not([type="checkbox"], [type="radio"], [type="hidden"])) {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
