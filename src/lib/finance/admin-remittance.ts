@@ -296,7 +296,7 @@ async function reviewOrConfirm(
       entityId: submissionId,
       previousValue: { status: "PENDING_REVIEW" },
       newValue: { decision, reason: opts.reason ?? null, confirmedAmount: opts.confirmedAmount ?? null },
-    });
+    }, tx);
     return {
       ok: true as const,
       riderId: sub.remittance.riderId,
@@ -378,7 +378,7 @@ export async function markRemittanceReceived(
       entityId: remit.id,
       previousValue: { status: remit.status, amountRemitted: Number(remit.amountRemitted) },
       newValue: { status: "RECEIVED", settledRemaining: left },
-    });
+    }, tx);
     return { ok: true, settledRemaining: r2(left), riderId: remit.riderId, wasRestricted };
   });
   if (res.wasRestricted && res.riderId) await notifyRiderReinstated(res.riderId);

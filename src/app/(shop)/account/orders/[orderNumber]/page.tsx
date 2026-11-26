@@ -89,12 +89,23 @@ export default function OrderDetailPage() {
     Record<string, { rating: number; comment: string; submitted?: boolean }>
   >({});
 
-  const load = useCallback(() => {
-    fetch(`/api/orders/${params.orderNumber}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success) setOrder(d.data);
-      });
+  /** First load failed (no order to show yet): show why with a retry instead of "Loading…" forever. */
+  const [loadError, setLoadError] = useState<{ status: number; message: string } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/orders/${params.orderNumber}`, { cache: "no-store" });
+      const d = await res.json().catch(() => null);
+      if (!d?.success) {
+        // A failed refresh keeps the order already on screen.
+        setLoadError({ status: res.status, message: d?.error || "Couldn't load this order." });
+        return;
+      }
+      setLoadError(null);
+      setOrder(d.data);
+    } catch {
+      setLoadError({ status: 0, message: "Couldn't load this order. Check your connection and try again." });
+    }
   }, [params.orderNumber]);
 
   useEffect(() => {
@@ -174,6 +185,32 @@ export default function OrderDetailPage() {
     }
   }, []);
 
+  if (!order && loadError) {
+    const notFound = loadError.status === 404;
+    return (
+      <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-card px-6 py-16 text-center">
+        <h2 className="text-xl font-bold text-ink">{notFound ? "Order not found" : "Couldn't load this order"}</h2>
+        <p className="mt-2 max-w-sm text-sm text-ink-subtle">
+          {notFound ? "It may belong to another account." : loadError.message}
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {!notFound && (
+            <Button
+              onClick={() => {
+                setLoadError(null);
+                load();
+              }}
+            >
+              Try again
+            </Button>
+          )}
+          <Button href="/account/orders" variant="outline">
+            My orders
+          </Button>
+        </div>
+      </div>
+    );
+  }
   if (!order) {
     return <div className="py-16 text-center text-sm text-ink-subtle">Loading order…</div>;
   }

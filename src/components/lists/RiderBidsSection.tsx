@@ -27,13 +27,22 @@ export function RiderBidsSection({ orderNumber, onAssigned }: { orderNumber: str
   const [busyId, setBusyId] = useState<string | null>(null);
   const keys = useRef(new Map<string, string>());
 
+  /** The first load failed: show it with a retry instead of a skeleton forever. */
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/rider-bids`, { cache: "no-store" });
       const d = await res.json().catch(() => null);
-      if (d?.success) setView(d.data);
+      if (d?.success) {
+        setView(d.data);
+        setLoadFailed(false);
+      } else {
+        setLoadFailed(true);
+      }
     } catch {
       /* keep the last view */
+      setLoadFailed(true);
     }
   }, [orderNumber]);
 
@@ -48,12 +57,13 @@ export function RiderBidsSection({ orderNumber, onAssigned }: { orderNumber: str
     ((req === null && BEFORE_PACKING.has(view.orderStatus)) || req?.status === "OPEN");
 
   useEffect(() => {
-    if (!live || busyId) return;
+    // Keep polling while bidding is live, and keep retrying until the first load works.
+    if ((!live && view) || busyId) return;
     const t = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
     }, REFRESH_MS);
     return () => window.clearInterval(t);
-  }, [live, busyId, load]);
+  }, [live, view, busyId, load]);
 
   async function choose(bid: RiderBidsView["bids"][number]) {
     const r = await confirm({
@@ -103,6 +113,29 @@ export function RiderBidsSection({ orderNumber, onAssigned }: { orderNumber: str
     }
   }
 
+  if (!view && loadFailed) {
+    return (
+      <section
+        data-testid="rider-bids"
+        aria-labelledby="rider-bids-title"
+        className="mb-6 rounded-2xl border border-line bg-card p-4 shadow-card sm:p-5"
+      >
+        <h2 id="rider-bids-title" className="flex items-center gap-2 font-bold text-ink">
+          <Bike className="h-4 w-4" /> Delivery rider
+        </h2>
+        <p role="alert" className="mt-3 text-sm text-ink-muted">
+          Couldn&apos;t load rider bids. We&apos;ll keep trying.
+        </p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="mt-3 inline-flex min-h-[44px] items-center rounded-xl border border-line px-4 text-sm font-semibold text-ink hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          Try again
+        </button>
+      </section>
+    );
+  }
   if (!view) {
     return <div className="mb-6 skeleton h-28 rounded-2xl" />;
   }
