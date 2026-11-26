@@ -7,7 +7,10 @@
  *   that got it said "can't supply", the radius grows by `radiusStepKm` (5 km),
  *   up to `radiusMaxKm` (20 km), and the next stores get it.
  * - A step that finds no new store widens straight away.
- * - Nothing left to widen and still no offer → NO_STORES, customer is told.
+ * - NO_STORES (customer told) only when no store has ever received the list.
+ *   Once some store has it and the radius is at its maximum (or every store
+ *   said "can't supply" there), the list stays open for the full window and
+ *   then restarts; ticks only watch the window end and the reminder.
  *
  * Rounds (owner rule): each round is open for `expiryHours` (48 h). If the
  * customer hasn't accepted an offer when it ends, that round's pending offers
@@ -368,12 +371,18 @@ export async function tickList(listId: string, now = new Date()): Promise<TickRe
     return (await remindIfDue(list, s, now)) ? "REMINDED" : "UNCHANGED";
   }
 
+  // At the largest radius with stores that have it: nothing more to widen. Wait for
+  // the window to end (then the list restarts; stocks change), don't end it early.
+  const everSent = list.broadcasts.length > 0;
+  if (list.radiusKm >= s.radiusMaxKm && everSent) return "UNCHANGED";
+
   const current = list.broadcasts.filter((b) => b.round === list.round);
   const allDeclined = current.length > 0 && current.every((b) => b.declinedAt);
   const dueByTime = now.getTime() - list.lastWidenedAt.getTime() >= s.radiusStepMins * 60_000;
   if (!allDeclined && !dueByTime) return "UNCHANGED";
 
   if (list.radiusKm >= s.radiusMaxKm) {
+    // Never sent to any store (see the early return above).
     await markNoStores(listId, list.customerId);
     return "NO_STORES";
   }
@@ -388,6 +397,8 @@ export async function tickList(listId: string, now = new Date()): Promise<TickRe
   const res = await sendFrom(list, list.radiusKm + s.radiusStepKm, s);
   await prisma.itemList.updateMany({ where: { id: listId, round: list.round }, data: { radiusKm: res.radiusKm } });
   if (res.sent === 0) {
+    // Reached the largest radius without a new store. Only give up if no store ever got it.
+    if (everSent) return "UNCHANGED";
     await markNoStores(listId, list.customerId);
     return "NO_STORES";
   }
@@ -404,8 +415,9 @@ export async function tickDueLists(opts: { limit?: number; now?: Date } = {}) {
       OR: [
         { expiresAt: { lte: now } },
         { reminderSentAt: null, expiresAt: { lte: new Date(now.getTime() + reminderLeadMs(s)) }, bids: { some: { status: "PENDING" } } },
-        { lastWidenedAt: { lte: new Date(now.getTime() - s.radiusStepMins * 60_000) } },
-        { broadcasts: { some: { declinedAt: { not: null } } } },
+        // Widening is only due below the largest radius; at it, only the window end and reminder matter.
+        { radiusKm: { lt: s.radiusMaxKm }, lastWidenedAt: { lte: new Date(now.getTime() - s.radiusStepMins * 60_000) } },
+        { radiusKm: { lt: s.radiusMaxKm }, broadcasts: { some: { declinedAt: { not: null } } } },
       ],
     },
     select: { id: true },

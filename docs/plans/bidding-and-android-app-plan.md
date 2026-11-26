@@ -276,6 +276,7 @@ For exact 30-minute steps, either upgrade to Vercel Pro (cron every minute) or u
 - When a round ends without an accept, `tickList` locks the list, marks that round's PENDING offers `EXPIRED` (kept), and restarts: `round + 1`, fresh window, radius back to the start. Last round's bidders get it again straight away ("List restarted, bid again"), then the first circle as for a new list; the customer gets "Your list restarted — round N".
 - About 6 h before a round ends (half the window if shorter), the customer gets one "Your offers expire in 6 hours — choose one" per round, only when there are offers (`reminderSentAt`).
 - `StoreBid` is one per store per list **per round**; `ListBroadcast.round` is the latest round a store got the list in.
+- A list is never ended early once a store has it: at the largest radius (or when every store there said "can't supply") it waits for the window end and restarts. `NO_STORES` only when no store has ever received it (at creation, or a restart that finds none).
 - Stops on accept, customer cancel or admin cancel. `listMaxRounds` (default 0 = unlimited) ends the list as `EXPIRED` after that many rounds.
 - Same tick triggers as above (on read, `/api/cron/lists-tick`, the daily cron).
 

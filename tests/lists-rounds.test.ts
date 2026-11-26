@@ -198,6 +198,56 @@ describeDb("list rounds: 48 h window, automatic restart", () => {
     expect(await list()).toMatchObject({ status: "BIDDING", round: 5 });
   });
 
+  it("sent to stores but no offers: stays BIDDING past the old widening time, then restarts at window end", async () => {
+    const at = (h: number) => new Date(Date.now() + h * HOUR);
+    // Widen 5 → 10 (S3) → 20 km; old rule would have ended it as NO_STORES here.
+    expect(await tickList(listId, at(1))).toBe("WIDENED");
+    expect(await tickList(listId, at(2))).toBe("UNCHANGED");
+    expect(await list()).toMatchObject({ status: "BIDDING", radiusKm: 20 });
+    // At the largest radius, later ticks do nothing and the cron doesn't pick it up for widening.
+    for (const h of [3, 10, 30, 47]) expect(await tickList(listId, at(h))).toBe("UNCHANGED");
+    expect(await tickDueLists({ now: at(10) })).toMatchObject({ checked: 0 });
+    const sentBefore = await prisma.listBroadcast.count({ where: { listId } });
+    expect(await prisma.notification.count({ where: { type: "NEW_LIST" } })).toBe(sentBefore);
+    expect(await list()).toMatchObject({ status: "BIDDING", round: 1 });
+    expect(await notes(f.customerA.id, "LIST_NO_STORES")).toBe(0);
+
+    // Window end → restart from the first circle.
+    expect(await tickList(listId, at(48.1))).toBe("RESTARTED");
+    expect(await list()).toMatchObject({ status: "BIDDING", round: 2, radiusKm: 5 });
+    expect(await notes(f.customerA.id, "LIST_RESTARTED")).toBe(1);
+  });
+
+  it("every store at the largest radius said can't supply: waits for the window end, then restarts", async () => {
+    await prisma.storeSettings.updateMany({ data: { listRadiusMaxKm: 5 } });
+    await prisma.listBroadcast.updateMany({ where: { listId }, data: { declinedAt: new Date() } });
+    expect(await tickList(listId)).toBe("UNCHANGED");
+    expect(await tickDueLists()).toMatchObject({ checked: 0 });
+    expect(await list()).toMatchObject({ status: "BIDDING", round: 1 });
+    await endWindow();
+    expect(await tickList(listId)).toBe("RESTARTED");
+    // New round: the stores get it again, decline reset.
+    const bc = await prisma.listBroadcast.findMany({ where: { listId } });
+    expect(bc.every((b) => b.round === 2 && b.declinedAt === null)).toBe(true);
+    expect(bc.length).toBe(2);
+  });
+
+  it("no store in range at all → NO_STORES right away (also on a restart that finds none)", async () => {
+    await prisma.store.updateMany({ data: { status: "SUSPENDED" } });
+    const grocery = await prisma.category.findUniqueOrThrow({ where: { slug: "grocery" } });
+    const none = await createList(
+      A(),
+      createListSchema.parse({ addressId: f.addressA.id, lines: [{ name: "Atta", quantity: 1, unit: "kg", categoryId: grocery.id }] })
+    );
+    expect(none.status).toBe("NO_STORES");
+    expect(await notes(f.customerA.id, "LIST_NO_STORES")).toBe(1);
+
+    // The beforeEach list was sent before the stores went away; its restart finds nobody.
+    await endWindow();
+    expect(await tickList(listId)).toBe("RESTARTED");
+    expect(await list()).toMatchObject({ status: "NO_STORES", round: 2 });
+  });
+
   it("my lists restarts a round that ended, so it shows as open in the new round", async () => {
     await bid(f.S1);
     await endWindow();
