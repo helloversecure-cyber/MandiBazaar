@@ -68,6 +68,10 @@ type Detail = {
   admin: {
     allowedNextStatuses: { status: OrderStatus; blockedReason: string | null; needsReason: boolean }[];
     canAssignRider: boolean;
+    /** W9: item-list order protected by the customer's delivery code */
+    deliveryCodeRequired?: boolean;
+    deliveryCodeAttempts?: number;
+    deliveryCodeLockedUntil?: string | null;
     customerPhone: string | null;
     customerPhoneSource: string | null;
     accountPhoneInvalid: boolean;
@@ -349,6 +353,27 @@ export default function AdminOrderDetailPage({ params }: { params: { orderNumber
             </Button>
           )}
         </div>
+
+        {a.deliveryCodeRequired &&
+          ["ASSIGNED_TO_RIDER", "OUT_FOR_DELIVERY"].includes(order.orderStatus) && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-ink-muted">
+                Delivery code: {a.deliveryCodeAttempts ?? 0} wrong{" "}
+                {a.deliveryCodeAttempts === 1 ? "try" : "tries"}
+                {a.deliveryCodeLockedUntil && new Date(a.deliveryCodeLockedUntil) > new Date()
+                  ? ` · locked until ${new Date(a.deliveryCodeLockedUntil).toLocaleTimeString()}`
+                  : ""}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => patch({ action: "RESET_DELIVERY_CODE" }, "New delivery code sent to the customer")}
+              >
+                Reset delivery code
+              </Button>
+            </div>
+          )}
 
         {a.canAssignRider && (
           <div className="mt-4 flex flex-wrap items-center gap-2">

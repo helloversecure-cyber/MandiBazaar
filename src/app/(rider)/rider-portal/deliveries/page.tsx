@@ -34,6 +34,8 @@ type Order = {
   remainingAmount: number;
   /** Cash to collect: products + delivery fee for full cash-on-delivery orders */
   cashDue?: { products: number; delivery: number; total: number };
+  /** W9: item-list order — the customer's 4-digit code is needed to deliver */
+  deliveryCodeRequired?: boolean;
   productPaymentStatus: string;
   paymentMethod: string;
   deliveryAddressSnapshot: Addr | null;
@@ -62,6 +64,7 @@ export default function RiderDeliveriesPage() {
   };
   const [busyId, setBusyId] = useState("");
   const [failReason, setFailReason] = useState<Record<string, string>>({});
+  const [deliveryCode, setDeliveryCode] = useState<Record<string, string>>({});
   const [proofUrl, setProofUrl] = useState<Record<string, string>>({});
   /** QA S16: proof upload error shown under the upload field */
   const [proofErr, setProofErr] = useState<Record<string, string>>({});
@@ -462,9 +465,30 @@ export default function RiderDeliveriesPage() {
                 )}
                 {o.orderStatus === "OUT_FOR_DELIVERY" && (
                   <>
+                    {o.deliveryCodeRequired && (
+                      <label className="flex flex-wrap items-center gap-2 text-sm">
+                        <span>Customer&apos;s delivery code</span>
+                        <input
+                          className="w-24 rounded-xl border border-line px-3 py-2 text-center text-sm tracking-widest"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          placeholder="0000"
+                          maxLength={4}
+                          value={deliveryCode[o.id] || ""}
+                          onChange={(e) =>
+                            setDeliveryCode({
+                              ...deliveryCode,
+                              [o.id]: e.target.value.replace(/\D/g, "").slice(0, 4),
+                            })
+                          }
+                        />
+                      </label>
+                    )}
                     <Button
                       disabled={
-                        busyId === o.id || (online && !proofOk)
+                        busyId === o.id ||
+                        (online && !proofOk) ||
+                        (!!o.deliveryCodeRequired && (deliveryCode[o.id] || "").length !== 4)
                       }
                       onClick={async () => {
                         // NEW-06: confirm before closing the order (no accidental
@@ -479,6 +503,7 @@ export default function RiderDeliveriesPage() {
                         if (!r.confirmed) return;
                         await act(o.id, "MARK_DELIVERED", {
                           amountCollected: needsCod ? o.remainingAmount : undefined,
+                          ...(o.deliveryCodeRequired ? { deliveryCode: deliveryCode[o.id] } : {}),
                         });
                       }}
                     >
