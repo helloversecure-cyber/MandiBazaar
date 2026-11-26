@@ -87,7 +87,73 @@ async function main() {
       },
     },
   });
-  console.log("e2e seed: fixtures + %d products + 1 order", items.length);
+  // W17: content for the rider portal pages. Rider R3 (offline, not used by the bidding
+  // specs) delivered MB-E2E-0001 and is out with a COD cart order for Customer B
+  // (MB-E2E-0002), so Deliveries, Earnings and Cash have rows and action buttons.
+  const now = Date.now();
+  const delivered = await prisma.order.update({ where: { orderNumber: "MB-E2E-0001" }, data: { riderId: f.R3.id } });
+  await prisma.delivery.create({
+    data: {
+      orderId: delivered.id,
+      riderId: f.R3.id,
+      assignedAt: new Date(now - 3 * 3600_000),
+      pickedUpAt: new Date(now - 2.5 * 3600_000),
+      deliveredAt: new Date(now - 2 * 3600_000),
+      riderFee: 150,
+    },
+  });
+  const rice = await prisma.product.findUniqueOrThrow({
+    where: { storeId_slug: { storeId: f.S1.id, slug: "basmati-rice-5kg" } },
+  });
+  await prisma.order.create({
+    data: {
+      orderNumber: "MB-E2E-0002",
+      customerId: f.customerB.id,
+      riderId: f.R3.id,
+      subtotal: 1650,
+      deliveryFee: 150,
+      grandTotal: 1800,
+      remainingAmount: 1800,
+      paymentMethod: "CASH_ON_DELIVERY",
+      orderStatus: "OUT_FOR_DELIVERY",
+      deliveryAddressSnapshot: {
+        fullName: "Customer B",
+        phone: "03007654321",
+        houseBuilding: "House 22, Street 4, near the long-named Jamia Masjid",
+        area: "Model Town",
+        city: "Lahore",
+        province: "Punjab",
+        latitude: a.latitude,
+        longitude: a.longitude,
+      },
+      items: {
+        create: {
+          storeId: f.S1.id,
+          storeName: f.S1.name,
+          productId: rice.id,
+          productName: rice.name,
+          sku: rice.sku,
+          unit: rice.unit,
+          quantity: 1,
+          unitPrice: 1650,
+          finalPrice: 1650,
+        },
+      },
+      fulfillments: {
+        create: {
+          storeId: f.S1.id,
+          status: "OUT_FOR_DELIVERY",
+          subtotal: 1650,
+          itemCount: 1,
+          pickupAddress: { addressLine: f.S1.addressLine, area: f.S1.area, city: f.S1.city },
+        },
+      },
+      delivery: {
+        create: { riderId: f.R3.id, assignedAt: new Date(now - 1800_000), pickedUpAt: new Date(now - 900_000) },
+      },
+    },
+  });
+  console.log("e2e seed: fixtures + %d products + 2 orders", items.length);
 }
 
 main()

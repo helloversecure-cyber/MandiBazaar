@@ -46,7 +46,10 @@ export function BottomNav({
 
   return (
     <>
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-line bg-card/95 backdrop-blur lg:hidden">
+      <nav
+        data-testid="portal-bottom-nav"
+        aria-label="Portal"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-line bg-card/95 backdrop-blur lg:hidden">
         {primary.map((item) => tab(item, isActive(item.href, pathname, rootHref)))}
         <button
           type="button"
@@ -59,7 +62,7 @@ export function BottomNav({
       </nav>
 
       {moreOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-labelledby="portal-menu-title">
           <button
             type="button"
             aria-label="Close menu"
@@ -68,7 +71,9 @@ export function BottomNav({
           />
           <div className="animate-pop-in absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-3xl border-t border-line bg-card p-4 pb-8">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-ink">Menu</h2>
+              <h2 id="portal-menu-title" className="text-sm font-bold text-ink">
+                Menu
+              </h2>
               <button
                 type="button"
                 onClick={() => setMoreOpen(false)}
