@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { expirePendingPayments } from "@/lib/orders/expire-pending";
 import { apiError, apiSuccess } from "@/lib/utils";
+import { reportServerError } from "@/lib/monitoring/alerts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
       .then((m) => m.tickDueLists({ limit: 500 }))
       .catch((e) => {
         console.error("[cron] lists tick", e);
+        reportServerError(e, { source: "cron/daily lists tick", route: "/api/cron/expire-pending-payments" });
         return null;
       });
     // Daily backstop for rider bidding after packing (re-open once / give up).
@@ -37,11 +39,13 @@ export async function GET(req: NextRequest) {
       .then((m) => m.tickDuePostPackRequests({ limit: 500 }))
       .catch((e) => {
         console.error("[cron] post-pack rider bids tick", e);
+        reportServerError(e, { source: "cron/daily post-pack rider bids tick", route: "/api/cron/expire-pending-payments" });
         return null;
       });
     return apiSuccess({ ...result, lists, riderBids });
   } catch (e) {
     console.error("[cron/expire-pending-payments]", e);
+    reportServerError(e, { source: "cron/expire-pending-payments", method: req.method, route: "/api/cron/expire-pending-payments" });
     return apiError("Expire job failed", 500);
   }
 }

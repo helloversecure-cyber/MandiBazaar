@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { tickDueLists } from "@/lib/lists/broadcast";
 import { tickDuePostPackRequests } from "@/lib/orders/post-pack-bidding";
 import { apiError, apiSuccess } from "@/lib/utils";
+import { reportServerError } from "@/lib/monitoring/alerts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
     return apiSuccess({ ...lists, riderBids });
   } catch (e) {
     console.error("[cron/lists-tick]", e);
+    reportServerError(e, { source: "cron/lists-tick", method: req.method, route: "/api/cron/lists-tick" });
     return apiError("Lists tick failed", 500);
   }
 }

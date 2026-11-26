@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { sweepOverdueRemittances } from "@/lib/finance/remittance";
 import { apiError, apiSuccess } from "@/lib/utils";
+import { reportServerError } from "@/lib/monitoring/alerts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,7 @@ export async function GET(req: NextRequest) {
     return apiSuccess(result);
   } catch (e) {
     console.error("[cron/remittance-sweep]", e);
+    reportServerError(e, { source: "cron/remittance-sweep", method: req.method, route: "/api/cron/remittance-sweep" });
     return apiError("Remittance sweep failed", 500);
   }
 }

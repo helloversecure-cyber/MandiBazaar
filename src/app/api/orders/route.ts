@@ -28,6 +28,7 @@ import {
   parsePagination,
   toNumber,
 } from "@/lib/utils";
+import { isUnexpectedError, reportServerError } from "@/lib/monitoring/alerts";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { getUserStoreIds } from "@/lib/stores/access";
@@ -280,6 +281,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     console.error("[GET /api/orders]", e);
+    reportServerError(e, { source: "orders/GET", method: "GET", route: "/api/orders" });
     return apiError("Failed to load orders", 500);
   }
 }
@@ -1032,6 +1034,10 @@ export async function PATCH(req: Request) {
     const msg = e instanceof Error ? e.message : "Update failed";
     if (msg === "UNAUTHORIZED") return apiError("Unauthorized", 401);
     if (msg === "FORBIDDEN") return apiError("Forbidden", 403);
+    if (isUnexpectedError(e)) {
+      console.error("[PATCH /api/orders]", e);
+      reportServerError(e, { source: "orders/PATCH", method: "PATCH", route: "/api/orders" });
+    }
     return apiError(msg, 400);
   }
 }

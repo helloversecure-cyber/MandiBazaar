@@ -5,6 +5,7 @@ import { CouponError } from "@/lib/orders/coupons";
 import { apiError, apiFieldErrors, apiSuccess, apiZodError, toUserMessage } from "@/lib/utils";
 import { MSG, normalizePkMobile } from "@/lib/validators/pk";
 import { rateLimit } from "@/lib/rate-limit";
+import { isUnexpectedError, reportServerError } from "@/lib/monitoring/alerts";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -86,6 +87,9 @@ export async function POST(req: Request) {
       );
     }
     console.error("[checkout]", e);
+    if (isUnexpectedError(e)) {
+      reportServerError(e, { source: "orders/checkout", method: "POST", route: "/api/checkout" });
+    }
     return apiError(toUserMessage(e), 400);
   }
 }
