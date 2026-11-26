@@ -94,6 +94,17 @@ describeDb("mobile auth", () => {
     expect(res.status).toBe(403);
   });
 
+  it("A-04 admins can't get app tokens through the customer or store portal either", async () => {
+    for (const portal of ["customer", "store"]) {
+      const res = await signIn("admin@test.local", "Correct#123", portal);
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.code).toBe("PORTAL_NOT_IN_APP");
+      expect(body.data).toBeUndefined();
+    }
+    expect(await prisma.mobileRefreshToken.count({ where: { userId: f.admin.id } })).toBe(0);
+  });
+
   it("A-05 a pending rider can sign in", async () => {
     await prisma.rider.update({ where: { id: f.R3.id }, data: { approvalStatus: "PENDING" } });
     const res = await signIn("rider.r3@test.local", "Correct#123", "rider");
@@ -101,14 +112,14 @@ describeDb("mobile auth", () => {
     expect((await res.json()).data.user.role).toBe("RIDER");
   });
 
-  it("A-05 a rejected rider gets the rejection reason", async () => {
+  it("A-05 a rejected rider can sign in (to see the reason and re-apply)", async () => {
     await prisma.rider.update({
       where: { id: f.R3.id },
       data: { approvalStatus: "REJECTED", reviewNotes: "CNIC unreadable" },
     });
     const res = await signIn("rider.r3@test.local", "Correct#123", "rider");
-    expect(res.status).toBe(401);
-    expect((await res.json()).error).toBe("Application rejected: CNIC unreadable");
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.user.role).toBe("RIDER");
     await prisma.rider.update({ where: { id: f.R3.id }, data: { approvalStatus: "APPROVED", reviewNotes: null } });
   });
 
@@ -220,8 +231,10 @@ describeDb("mobile auth", () => {
       authorize({ identifier: "customer.a@test.local", password: "Correct#123", portal: "store" }, { headers: {} })
     ).rejects.toThrow("Unauthorized store access");
     // Admin sign-in is still written to the audit log.
+    const adminSignIns = () => prisma.auditLog.count({ where: { action: "ADMIN_SIGN_IN", userId: f.admin.id } });
+    const before = await adminSignIns();
     await authorize({ identifier: "admin@test.local", password: "Correct#123", portal: "admin" }, { headers: {} });
-    expect(await prisma.auditLog.count({ where: { action: "ADMIN_SIGN_IN", userId: f.admin.id } })).toBe(1);
+    expect(await adminSignIns()).toBe(before + 1);
   });
 
   it("an unapproved store owner signs in with storeApproved=false", async () => {
