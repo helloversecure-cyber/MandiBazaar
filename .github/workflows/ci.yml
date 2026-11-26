@@ -43,8 +43,10 @@ jobs:
       DATABASE_URL: postgresql://mb:mb@localhost:5432/mandibazaar_test
       TEST_DATABASE_URL: postgresql://mb:mb@localhost:5432/mandibazaar_test
       NEXTAUTH_SECRET: ci-only-secret-not-used-anywhere-else
-      NEXTAUTH_URL: http://localhost:3000
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      # The browser tests' server address (playwright.config.ts, port 3100). NEXT_PUBLIC_*
+      # values are fixed by `next build`, and the browser tests run on that build.
+      NEXTAUTH_URL: http://localhost:3100
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +64,9 @@ jobs:
         run: npx vitest run
       - name: Build
         run: npx next build
-      - name: Browser tests (6 widths)
+      - name: Browser tests (6 widths, production build via next start)
+        env:
+          E2E_SERVER: start
         run: |
           npx playwright install --with-deps chromium
           npx playwright test
