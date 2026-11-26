@@ -4,11 +4,17 @@
  *   Stores S1 (2 km, Grocery), S2 (4 km, Grocery), S3 (8 km, Grocery),
  *          S4 (3 km, Pharmacy only), S5 (2 km, Grocery, SUSPENDED).
  *   Riders R1 (online), R2 (online), R3 (offline), R4 (overdue COD cash).
+ * Every user's password is TEST_PASSWORD (local sign-in without Firebase).
  */
+import bcrypt from "bcryptjs";
 import { RoleName } from "@prisma/client";
 import { prisma } from "./db";
 
 export const PIN = { lat: 31.4834, lng: 74.326 };
+/** Password of every fixture user (used by local sign-in without Firebase). */
+export const TEST_PASSWORD = "Test#12345";
+let hashCache: string | null = null;
+const testPasswordHash = async () => (hashCache ??= await bcrypt.hash(TEST_PASSWORD, 8));
 /** ~1 km of latitude */
 const KM = 1 / 111;
 
@@ -26,6 +32,7 @@ async function user(name: string, roleName: RoleName, email: string, phone: stri
       roleId: r.id,
       emailVerified: new Date(),
       onboardingCompleted: true,
+      passwordHash: await testPasswordHash(),
     },
   });
 }

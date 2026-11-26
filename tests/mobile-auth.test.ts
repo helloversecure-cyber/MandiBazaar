@@ -4,7 +4,9 @@
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+const fb = vi.hoisted(() => ({ enabled: true }));
 vi.mock("@/lib/firebase/admin", () => ({
+  firebaseAuthEnabled: () => fb.enabled,
   getFirebaseUserByEmail: vi.fn(async (email: string) => ({ uid: `fb-${email}`, emailVerified: true, disabled: false })),
   verifyFirebasePassword: vi.fn(async (_email: string, password: string) =>
     password === "Correct#123" ? { ok: true } : { ok: false, reason: "INVALID_PASSWORD" }
@@ -19,7 +21,7 @@ import { POST as logout } from "@/app/api/mobile/auth/logout/route";
 import { sessionFromBearer } from "@/lib/auth/mobile-tokens";
 import { prisma, resetDb } from "./helpers/db";
 import { describeDb } from "./helpers/describe-db";
-import { seedStandardFixtures, type Fixtures } from "./helpers/fixtures";
+import { seedStandardFixtures, TEST_PASSWORD, type Fixtures } from "./helpers/fixtures";
 
 let ipCounter = 0;
 function post(handler: (r: Request) => Promise<Response>, body: unknown, ip?: string) {
@@ -229,6 +231,37 @@ describeDb("mobile auth", () => {
     const session = await sessionFromBearer(`Bearer ${data.accessToken}`);
     expect(session?.user.storeApproved).toBe(false);
     await prisma.store.update({ where: { id: f.S2.id }, data: { status: "APPROVED" } });
+  });
+});
+
+describeDb("local development sign-in without Firebase", () => {
+  beforeAll(async () => {
+    await resetDb();
+    await seedStandardFixtures();
+  });
+
+  it("with no Firebase configured, the bcrypt password signs in (dev and tests only)", async () => {
+    fb.enabled = false;
+    try {
+      const ok = await signIn("customer.a@test.local", TEST_PASSWORD);
+      expect(ok.status).toBe(200);
+      const bad = await signIn("customer.a@test.local", "wrong");
+      expect(bad.status).toBe(401);
+    } finally {
+      fb.enabled = true;
+    }
+  });
+
+  it("is never active in production", async () => {
+    const { localDevWithoutFirebase } = await import("@/lib/auth/password-check");
+    fb.enabled = false;
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(localDevWithoutFirebase()).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      fb.enabled = true;
+    }
   });
 });
 
