@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { DownloadInvoiceButton } from "@/components/orders/DownloadInvoiceButton";
 import { OrderTimeline, type JourneyStep } from "@/components/orders/OrderTimeline";
 import { useConfirm } from "@/components/ui/feedback";
+import { RiderBidsSection } from "@/components/lists/RiderBidsSection";
 import { Star } from "lucide-react";
 
 const CANCELABLE = new Set([
@@ -54,6 +55,8 @@ type Order = {
   refunds?: { id: string; amount: number; status: string; reason: string }[];
   statusTimeline?: JourneyStep[];
   paymentProofs?: { id: string; status: string; reviewNotes?: string | null }[];
+  /** Set when the order came from an accepted item list (W7): rider bidding after packing. */
+  itemList?: { id: string } | null;
 };
 
 export default function OrderDetailPage() {
@@ -121,7 +124,11 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const notice = new URLSearchParams(window.location.search).get("notice");
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("from") === "list") {
+      setMsg("Order placed. The store is preparing it; you'll choose a delivery rider here once it's packed.");
+    }
+    const notice = qs.get("notice");
     if (notice === "payment_review") {
       setMsg(
         "Payment arrived after this order closed. A refund has been queued — MandiBazaar will process it."
@@ -138,6 +145,9 @@ export default function OrderDetailPage() {
   const refundable = order.refundableAmount ?? 0;
   const isCancelled = order.orderStatus === "CANCELLED";
   const isDelivered = order.orderStatus === "DELIVERED";
+  const isListOrder = !!order.itemList;
+  // List orders: the delivery fee comes from the rider the customer chooses after packing.
+  const feePending = isListOrder && !order.rider && (order.deliveryFee || 0) <= 0;
   // JazzCash-QR receipt state: a submitted receipt keeps the order PENDING_PAYMENT
   // until an admin verifies, so surface it instead of a generic "pay again" prompt.
   const awaitingPayment = order.orderStatus === "PENDING_PAYMENT";
@@ -357,7 +367,9 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {order.rider && (
+      {isListOrder && !isCancelled && <RiderBidsSection orderNumber={order.orderNumber} onAssigned={load} />}
+
+      {order.rider && !isListOrder && (
         <div className="mb-6 rounded-2xl border border-line bg-card p-5 shadow-card text-sm">
           <h2 className="font-bold text-ink">Assigned rider</h2>
           <p className="mt-2 text-ink-muted">
@@ -460,7 +472,7 @@ export default function OrderDetailPage() {
       <div className="rounded-2xl border border-line bg-card p-5 shadow-card space-y-3 text-sm">
         <Row label="Product subtotal" value={formatCurrency(order.subtotal)} />
         <Row label="Discount" value={`-${formatCurrency(order.discount)}`} />
-        <Row label="Delivery fee" value={formatCurrency(order.deliveryFee)} />
+        <Row label="Delivery fee" value={feePending ? "Set by rider bidding" : formatCurrency(order.deliveryFee)} />
         <Row
           label={
             order.fullCod && (order.deliveryFeePaid || 0) <= 0

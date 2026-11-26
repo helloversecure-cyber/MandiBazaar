@@ -25,6 +25,9 @@ async function main() {
   const token = await encode({
     secret: E2E_SECRET,
     token: {
+      // NextAuth puts name and email in every JWT it issues; list bidding's beta check reads the email.
+      name: user.fullName,
+      email: user.email,
       sub: user.id,
       id: user.id,
       role: user.role.name,

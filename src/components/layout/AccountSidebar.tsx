@@ -15,13 +15,17 @@ import {
   LogOut,
   ChevronRight,
   HelpCircle,
+  ClipboardList,
 } from "lucide-react";
+import { useListBidding } from "@/components/lists/useListBidding";
 import { cn } from "@/lib/utils";
 
-const links = [
+const allLinks = [
   { href: "/account", label: "Overview", icon: User, exact: true },
   { href: "/account/profile", label: "Profile", icon: UserCog },
   { href: "/account/orders", label: "My orders", icon: Package },
+  // W12: shown only when list bidding is on for this customer.
+  { href: "/account/lists", label: "My lists", icon: ClipboardList, needsLists: true },
   { href: "/account/addresses", label: "Addresses", icon: MapPin },
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/account/reviews", label: "Reviews", icon: Star },
@@ -35,6 +39,8 @@ const GUIDE_HREF = "/onboarding/customer?force=1&next=/account";
 export function AccountSidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const listsOn = useListBidding();
+  const links = allLinks.filter((l) => !("needsLists" in l) || listsOn);
 
   return (
     <aside className="lg:sticky lg:top-36 lg:self-start">
