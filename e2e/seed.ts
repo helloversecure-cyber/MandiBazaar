@@ -36,6 +36,23 @@ async function main() {
       data: { fullName: `Delete Me ${w}`, email: `delete.w${w}@test.local`, roleId: f.customerA.roleId, emailVerified: new Date() },
     });
   }
+  // W18: one customer per width with a saved address for the cart checkout journey
+  // (e2e/journeys.spec.ts), so each width starts with an empty cart.
+  for (const w of [360, 390, 768, 1024, 1280, 1440]) {
+    const phone = `0302000${String(w).padStart(4, "0")}`;
+    const u = await prisma.user.create({
+      data: {
+        fullName: "Journey Tester", // checkout accepts letters only
+        email: `journey.w${w}@test.local`,
+        phone,
+        roleId: f.customerA.roleId,
+        emailVerified: new Date(),
+        onboardingCompleted: true,
+      },
+    });
+    const { id: _id, userId: _u, createdAt: _c, updatedAt: _up, ...addr } = f.addressA;
+    await prisma.address.create({ data: { ...addr, userId: u.id, fullName: u.fullName, phone } });
+  }
   // One delivered order so /account/orders and its detail page have content.
   const atta = await prisma.product.findUniqueOrThrow({
     where: { storeId_slug: { storeId: f.S1.id, slug: "atta-10kg" } },

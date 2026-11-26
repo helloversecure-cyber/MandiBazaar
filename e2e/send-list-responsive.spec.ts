@@ -7,8 +7,11 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { BASE_URL } from "../playwright.config";
 import { CUSTOMER_STATE } from "./global-setup";
-import { addressIdA, bearer, markReady, riderBid, riderRequestId, seedRiders, storeBid } from "./list-bidding-helpers";
+import { addressIdA, ageCustomerLists, bearer, markReady, riderBid, riderRequestId, seedRiders, storeBid } from "./list-bidding-helpers";
 import { findHorizontalOverflow, findSmallTapTargets, openPage } from "./responsive-audit";
+
+// Fresh lists-per-hour budget for Customer A (W18: the full suite at 6 widths shares one server).
+test.beforeAll(() => ageCustomerLists());
 
 test.describe.configure({ timeout: 90_000 });
 test.use({ storageState: CUSTOMER_STATE });

@@ -17,7 +17,7 @@
 import { execFileSync } from "node:child_process";
 import { expect as baseExpect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import { BASE_URL } from "../playwright.config";
-import { addressIdA, bearer, markReady, riderRequestId, seedRiders, sessionCookie, storeBid } from "./list-bidding-helpers";
+import { addressIdA, ageCustomerLists, bearer, markReady, riderRequestId, seedRiders, sessionCookie, storeBid } from "./list-bidding-helpers";
 import { findHorizontalOverflow, findSmallTapTargets, openPage } from "./responsive-audit";
 
 
@@ -37,13 +37,6 @@ async function api(playwright: { request: { newContext: (o: object) => Promise<A
   return playwright.request.newContext({ baseURL: BASE_URL, storageState: { cookies: [], origins: [] } });
 }
 
-/** Reset Customer A's lists-per-hour budget (every spec sends lists as A on the same server). */
-function ageCustomerLists() {
-  execFileSync("npx", ["tsx", "e2e/age-lists.ts", A], {
-    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL },
-    stdio: "inherit",
-  });
-}
 
 async function createList(request: APIRequestContext, note: string, lines: { name: string; quantity: number; unit: string }[]) {
   const send = async () =>
