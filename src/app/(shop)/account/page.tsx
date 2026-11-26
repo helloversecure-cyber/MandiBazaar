@@ -80,7 +80,7 @@ export default function AccountPage() {
                   <td className="px-5 py-3.5">
                     <Link
                       href={`/account/orders/${o.orderNumber}`}
-                      className="font-semibold text-brand-600 hover:underline"
+                      className="font-semibold text-brand-600 hover:underline max-md:inline-flex max-md:items-center"
                     >
                       {o.orderNumber}
                     </Link>

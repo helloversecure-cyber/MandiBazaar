@@ -19,7 +19,7 @@ export function BrandLogo({
   size = "lg",
 }: Props) {
   const onDark = variant === "dark";
-  const basketClass = size === "lg" ? "h-14 w-14 sm:h-16 sm:w-16" : "h-12 w-12";
+  const basketClass = size === "lg" ? "h-12 w-12 min-[390px]:h-14 min-[390px]:w-14 sm:h-16 sm:w-16" : "h-12 w-12";
 
   const inner = (
     <span className={cn("inline-flex items-center gap-0.5 sm:gap-1", className)}>

@@ -11,7 +11,8 @@ if (!/^postgres(ql)?:\/\/[^/]*@?(localhost|127\.0\.0\.1)[:/]/.test(testDb)) {
   throw new Error("TEST_DATABASE_URL must point at localhost.");
 }
 
-const PORT = 3100;
+/** Override with E2E_PORT to run beside another dev server (default 3100). */
+const PORT = Number(process.env.E2E_PORT) || 3100;
 export const BASE_URL = `http://localhost:${PORT}`;
 export const E2E_SECRET = "e2e-only-nextauth-secret";
 
