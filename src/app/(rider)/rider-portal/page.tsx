@@ -69,6 +69,21 @@ export default function RiderDashboardPage() {
     return <p className="text-ink-subtle">Loading…</p>;
   }
 
+  // Checked first: the API also sets pendingApproval for a rejected rider.
+  if (data.rider.approvalStatus === "REJECTED") {
+    return (
+      <div className="mx-auto max-w-lg rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+        <p className="text-4xl">❌</p>
+        <h1 className="mt-3 text-2xl font-extrabold text-red-950">
+          Application rejected
+        </h1>
+        <p className="mt-2 text-sm text-red-800">
+          {data.rider.reviewNotes || "Contact MandiBazaar for details."}
+        </p>
+      </div>
+    );
+  }
+
   if (data.pendingApproval || data.rider.approvalStatus === "PENDING") {
     return (
       <div className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
@@ -86,20 +101,6 @@ export default function RiderDashboardPage() {
         <Button className="mt-6" variant="outline" onClick={load}>
           Refresh status
         </Button>
-      </div>
-    );
-  }
-
-  if (data.rider.approvalStatus === "REJECTED") {
-    return (
-      <div className="mx-auto max-w-lg rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
-        <p className="text-4xl">❌</p>
-        <h1 className="mt-3 text-2xl font-extrabold text-red-950">
-          Application rejected
-        </h1>
-        <p className="mt-2 text-sm text-red-800">
-          {data.rider.reviewNotes || "Contact MandiBazaar for details."}
-        </p>
       </div>
     );
   }
