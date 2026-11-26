@@ -151,7 +151,7 @@ export function Header({
 
       <header className="sticky top-0 z-50 border-b border-line bg-card shadow-sm">
         {/* Main bar */}
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 lg:gap-6 lg:px-6">
+        <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3 sm:gap-3 lg:gap-6 lg:px-6">
           <button
             className="rounded-lg p-2 text-ink-muted hover:bg-slate-100 lg:hidden"
             onClick={() => setOpen(true)}
@@ -247,7 +247,7 @@ export function Header({
           </div>
 
           {/* Actions */}
-          <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+          <div className="ml-auto flex items-center sm:gap-1">
             <Link
               href="/products?focus=search"
               className="rounded-lg p-2.5 text-ink-muted hover:bg-slate-100 md:hidden"

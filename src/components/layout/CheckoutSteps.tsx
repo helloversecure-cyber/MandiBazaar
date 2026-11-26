@@ -12,7 +12,7 @@ export function CheckoutSteps({
 }) {
   return (
     <div className="mb-8 overflow-x-auto">
-      <ol className="flex min-w-[480px] items-center">
+      <ol className="flex items-center sm:min-w-[480px]">
         {STEPS.map((label, i) => {
           const step = i + 1;
           const done = step < current;
