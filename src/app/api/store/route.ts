@@ -177,6 +177,9 @@ export async function GET(req: NextRequest) {
                 rider: {
                   select: { id: true, name: true, phone: true, vehicleType: true },
                 },
+                // W8: list orders get rider bidding after packing; cart orders have neither.
+                itemList: { select: { id: true } },
+                deliveryRequest: { select: { trigger: true, status: true, expiresAt: true } },
               },
             },
             store: { select: { name: true } },
@@ -194,13 +197,17 @@ export async function GET(req: NextRequest) {
       return apiSuccess({
         items: rows.map((f) => {
           const addr = (f.order.deliveryAddressSnapshot || {}) as Record<string, unknown>;
-          const { deliveryAddressSnapshot: _omit, ...order } = f.order;
+          const { deliveryAddressSnapshot: _omit, itemList, deliveryRequest, ...order } = f.order;
           void _omit;
+          const postPack = deliveryRequest?.trigger === "POST_PACK" ? deliveryRequest : null;
           return {
             ...f,
             subtotal: toNumber(f.subtotal),
             order: {
               ...order,
+              isListOrder: !!itemList,
+              itemListId: itemList?.id ?? null,
+              postPackRequest: postPack ? { status: postPack.status, expiresAt: postPack.expiresAt } : null,
               // Stores see the delivery area only, not the full home address.
               deliveryArea: [addr.area, addr.city].filter(Boolean).join(", ") || null,
               items: order.items.map((i) => ({

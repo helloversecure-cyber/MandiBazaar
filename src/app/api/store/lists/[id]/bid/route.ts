@@ -9,7 +9,7 @@ import { apiError, apiSuccess } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 type Ctx = { params: { id: string } };
 
-/** Make or update my offer. Body: { storeId?, lines: [{ lineId, available, unitPrice? }], discount?, prepMinutes?, note? } */
+/** Make or update my offer. Body: { storeId?, listVersion?, lines: [{ lineId, available, unitPrice? }], discount?, prepMinutes?, note? } */
 export async function PUT(req: Request, { params }: Ctx) {
   try {
     const session = await requireStorePortal();
