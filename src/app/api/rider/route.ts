@@ -32,6 +32,11 @@ import {
 import { isUsableImageUrl } from "@/lib/orders/proof-review";
 import { recordRiderFeeForOrder } from "@/lib/riders/pay";
 import { parseRiderLocation, saveRiderLocation } from "@/lib/riders/location";
+import {
+  DeliveryCodeError,
+  ordersRequiringDeliveryCode,
+  verifyDeliveryCode,
+} from "@/lib/orders/delivery-code";
 
 function serializeOrder(o: {
   subtotal: unknown;
@@ -187,8 +192,10 @@ export async function GET(req: NextRequest) {
         take,
       });
 
+      // W9: say which deliveries need the customer's code (never the code itself).
+      const needCode = await ordersRequiringDeliveryCode(prisma, items.map((o) => o.id));
       return apiSuccess({
-        items: items.map(serializeOrder),
+        items: items.map((o) => ({ ...serializeOrder(o), deliveryCodeRequired: needCode.has(o.id) })),
         pagination: paginationMeta(page, limit, total),
       });
     }
@@ -275,6 +282,7 @@ export async function GET(req: NextRequest) {
       take: 5,
     });
 
+    const recentNeedCode = await ordersRequiringDeliveryCode(prisma, recent.map((o) => o.id));
     return apiSuccess({
       rider: {
         id: rider.id,
@@ -294,7 +302,7 @@ export async function GET(req: NextRequest) {
         overdueAmount: cash.overdue,
         codRestricted: cash.restricted,
       },
-      recent: recent.map(serializeOrder),
+      recent: recent.map((o) => ({ ...serializeOrder(o), deliveryCodeRequired: recentNeedCode.has(o.id) })),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed";
@@ -498,9 +506,30 @@ export async function PATCH(req: Request) {
       return apiSuccess({ message: "Delivery started — out for delivery" });
     }
 
+    // --- W9: check the customer's delivery code before Mark delivered ---
+    if (action === "VERIFY_DELIVERY_CODE") {
+      if (order.orderStatus !== "OUT_FOR_DELIVERY") {
+        return apiError("Start the delivery before entering the code", 400);
+      }
+      const r = await verifyDeliveryCode({
+        orderId,
+        input: body.deliveryCode,
+        actorUserId: session.user.id,
+        riderId: rider.id,
+      });
+      return apiSuccess({
+        verified: true,
+        required: r.required,
+        message: r.required ? "Code is correct — you can mark the order delivered" : "This order needs no delivery code",
+      });
+    }
+
     // --- Mark delivered (+ optional COD collect) ---
     if (action === "MARK_DELIVERED") {
       assertTransition(order.orderStatus, OrderStatus.DELIVERED);
+      if (order.orderStatus === "DELIVERED") {
+        return apiError("This order is already marked delivered", 400);
+      }
 
       if (needsOnlineProof && !hasApprovedProof) {
         const pending = order.paymentProofs.some(
@@ -534,6 +563,15 @@ export async function PATCH(req: Request) {
         }
       }
 
+      // W9: item-list orders need the customer's 4-digit code (H-03 … H-05).
+      // Checked last so a cash or screenshot problem doesn't use up a try.
+      const codeCheck = await verifyDeliveryCode({
+        orderId,
+        input: body.deliveryCode,
+        actorUserId: session.user.id,
+        riderId: rider.id,
+      });
+
       await prisma.$transaction(async (tx) => {
         // Lock the order row and re-check inside the transaction so a double
         // tap can't deliver (and finalize stock / collect cash) twice.
@@ -560,7 +598,7 @@ export async function PATCH(req: Request) {
           status: "DELIVERED",
           actorId: session.user.id,
           actorRole: "RIDER",
-          note: "Marked delivered by rider",
+          note: codeCheck.required ? "Marked delivered by rider (delivery code checked)" : "Marked delivered by rider",
         });
         await tx.delivery.upsert({
           where: { orderId },
@@ -622,6 +660,7 @@ export async function PATCH(req: Request) {
         action: "RIDER_MARK_DELIVERED",
         entity: "Order",
         entityId: orderId,
+        ...(codeCheck.required ? { newValue: { deliveryCodeChecked: true } } : {}),
       });
       await notifyOrderEvent(
         orderId,
@@ -768,6 +807,12 @@ export async function PATCH(req: Request) {
 
     return apiError("Unknown action", 400);
   } catch (e) {
+    if (e instanceof DeliveryCodeError) {
+      return Response.json(
+        { success: false, error: e.message, code: e.code, ...e.extra },
+        { status: e.status }
+      );
+    }
     const msg = e instanceof Error ? e.message : "Update failed";
     if (msg === "UNAUTHORIZED") return apiError("Unauthorized", 401);
     if (msg === "CASH_ALREADY_COLLECTED") {
