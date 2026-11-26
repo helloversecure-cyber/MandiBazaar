@@ -8,6 +8,7 @@
  */
 import { prisma } from "@/lib/db";
 import { computeDeliveryFee, getDeliverySettings } from "@/lib/orders/delivery-fee";
+import { ratingOf, storeRatings } from "@/lib/stores/reviews";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -125,16 +126,8 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
   if (!list.bids.length) return [];
 
   const storeIds = list.bids.map((b) => b.storeId);
-  const [ratings, deliverySettings] = await Promise.all([
-    prisma.storeReview.groupBy({
-      by: ["storeId"],
-      where: { storeId: { in: storeIds } },
-      _avg: { rating: true },
-      _count: { _all: true },
-    }),
-    getDeliverySettings(),
-  ]);
-  const ratingBy = new Map(ratings.map((r) => [r.storeId, r]));
+  // W9: real customer ratings (StoreReview), shared with the public store pages.
+  const [ratingBy, deliverySettings] = await Promise.all([storeRatings(storeIds), getDeliverySettings()]);
   const distanceBy = new Map(list.broadcasts.map((b) => [b.storeId, b.distanceKm == null ? null : Number(b.distanceKm)]));
   const open = list.status === "BIDDING" && list.expiresAt.getTime() > Date.now();
   const area = (list.addressSnapshot as { area?: string } | null)?.area ?? "";
@@ -160,7 +153,7 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
     const discount = Number(b.discount);
     const total = round2(itemsTotal - discount);
     const needsUpdate = b.status === "PENDING" && b.listVersion !== list.version;
-    const r = ratingBy.get(b.storeId);
+    const r = ratingOf(ratingBy, b.storeId);
     const fee = computeDeliveryFee(
       {
         city: list.city,
@@ -184,8 +177,8 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
         logoUrl: b.store.logoUrl,
         area: b.store.area,
         city: b.store.city,
-        rating: r?._avg.rating != null ? Math.round(r._avg.rating * 10) / 10 : null,
-        ratingCount: r?._count._all ?? 0,
+        rating: r.average,
+        ratingCount: r.count,
       },
       distanceKm: distanceBy.get(b.storeId) ?? null,
       itemsTotal,

@@ -47,14 +47,10 @@ export async function signInWithPassword(
     if (!rider) {
       throw new Error("Rider profile not linked. Contact MandiBazaar.");
     }
-    if (rider.approvalStatus === "REJECTED") {
-      throw new Error(
-        rider.reviewNotes
-          ? `Application rejected: ${rider.reviewNotes}`
-          : "Rider application was rejected. Contact MandiBazaar."
-      );
-    }
-    // PENDING riders can login to see approval status; APPROVED can work
+    // PENDING and REJECTED riders can sign in to see their approval status
+    // (a rejected rider sees the reason and can re-apply via
+    // POST /api/rider/reapply). Delivery work is gated by requireRider(),
+    // which only lets APPROVED + active riders through.
   }
 
   await prisma.user.update({

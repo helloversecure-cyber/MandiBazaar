@@ -267,7 +267,8 @@ const riderDocShape = Object.fromEntries(
   RIDER_DOC_FIELDS.map(([key, label]) => [key, zUploadUrl(label)])
 ) as Record<(typeof RIDER_DOC_FIELDS)[number][0], ReturnType<typeof zUploadUrl>>;
 
-const riderSignupObject = registerSchema.extend({
+/** Rider application fields (city, vehicle, CNIC, payout, documents): signup and re-apply. */
+const riderApplicationShape = {
   city: zCity,
   vehicleType: zVehicleType,
   cnicNumber: zCnic,
@@ -276,15 +277,25 @@ const riderSignupObject = registerSchema.extend({
   bankName: optional(zBankName),
   jazzCashNumber: optional(zJazzCash),
   ...riderDocShape,
-});
+};
+
+const riderSignupObject = registerSchema.extend(riderApplicationShape);
+const riderReapplyObject = z.object(riderApplicationShape);
+
+function riderPayoutErrors(raw: RawValues, out: FieldErrors) {
+  if (!filled(raw.accountNumber) && !filled(raw.jazzCashNumber)) {
+    out.accountNumber = RIDER_PAYOUT_REQUIRED_MSG;
+  }
+}
 
 /** Rider self-signup (QA S3 / H3). */
 export function validateRiderSignup(values: unknown) {
-  return run(riderSignupObject, values, (raw, out) => {
-    if (!filled(raw.accountNumber) && !filled(raw.jazzCashNumber)) {
-      out.accountNumber = RIDER_PAYOUT_REQUIRED_MSG;
-    }
-  });
+  return run(riderSignupObject, values, riderPayoutErrors);
+}
+
+/** Rejected rider re-applies (POST /api/rider/reapply): same rules as signup, minus the account fields. */
+export function validateRiderReapply(values: unknown) {
+  return run(riderReapplyObject, values, riderPayoutErrors);
 }
 
 /** Change password (any role; required when User.mustChangePassword). */
