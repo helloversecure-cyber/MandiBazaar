@@ -208,7 +208,7 @@ function AdminOrdersInner() {
       {error && <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 overflow-x-auto rounded-3xl bg-card shadow-card">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="table-cards w-full min-w-[860px] text-left text-sm" data-testid="admin-orders-table">
           <thead className="bg-brand-50 dark:bg-brand-500/10">
             <tr>
               <th className="px-4 py-3">Order</th>
@@ -243,7 +243,7 @@ function AdminOrdersInner() {
                     o.waitingFlag ? "bg-amber-50" : ""
                   }`}
                 >
-                  <td className="px-4 py-3">
+                  <td data-label="Order" className="px-4 py-3">
                     <Link
                       href={`/admin/orders/${encodeURIComponent(o.orderNumber)}`}
                       className="font-medium text-ink hover:underline"
@@ -259,7 +259,7 @@ function AdminOrdersInner() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Customer" className="px-4 py-3">
                     {o.customer?.fullName || "—"}
                     <span className="block text-xs text-ink-subtle">
                       {o.customerPhone || "No valid phone"}
@@ -271,11 +271,11 @@ function AdminOrdersInner() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-ink-muted">
+                  <td data-label="Store" className="px-4 py-3 text-xs text-ink-muted">
                     {o.stores?.join(", ") || "—"}
                   </td>
-                  <td className="px-4 py-3">{formatCurrency(o.grandTotal)}</td>
-                  <td className="px-4 py-3 text-xs">
+                  <td data-label="Total" className="px-4 py-3">{formatCurrency(o.grandTotal)}</td>
+                  <td data-label="Paid / Remaining" className="px-4 py-3 text-xs">
                     Delivery: {formatCurrency(o.deliveryFeePaid)}
                     {o.fullCod ? " · Cash (rider)" : ""}
                     <br />
@@ -284,7 +284,7 @@ function AdminOrdersInner() {
                     To collect: {formatCurrency(o.remainingAmount)}
                     {o.cashDue && o.cashDue.delivery > 0 ? " (incl. delivery)" : ""}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Status" className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                         STATUS_BADGE[o.orderStatus] || "bg-brand-50 dark:bg-brand-500/10 text-ink"
@@ -296,7 +296,7 @@ function AdminOrdersInner() {
                       <span className="mt-1 block text-xs text-ink-subtle">Rider: {o.rider.name}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td data-label="Actions" className="px-4 py-3">
                     <Link
                       href={`/admin/orders/${encodeURIComponent(o.orderNumber)}`}
                       className="font-semibold text-leaf-600"

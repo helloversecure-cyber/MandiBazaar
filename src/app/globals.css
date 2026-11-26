@@ -60,13 +60,14 @@ html {
   }
 }
 
-/* L-09 (docs/plans/test-cases.md): on phones every shop control is at least 44 × 44 px.
-   Scoped to the shop layout. Links inside running text stay as they are (min-height
-   does not apply to inline boxes); standalone inline links opt in with max-md:inline-flex. */
+/* L-09 (docs/plans/test-cases.md): on phones every shop and portal control is at least
+   44 × 44 px. Scoped to the shop layout and the store / rider / admin dashboard shell (W17).
+   Links inside running text stay as they are (min-height does not apply to inline boxes);
+   standalone inline links opt in with max-md:inline-flex. */
 @layer components {
   @media (max-width: 767.98px) {
-    .shop-tap-targets
-      :where(a[href], button, [role="button"], select, input:not([type="checkbox"], [type="radio"], [type="hidden"])) {
+    :is(.shop-tap-targets, .portal-tap-targets)
+      :where(a[href], button, [role="button"], select, textarea, input:not([type="checkbox"], [type="radio"], [type="hidden"])) {
       min-height: 44px;
       min-width: 44px;
     }
@@ -338,5 +339,55 @@ html {
   }
   .reveal > * {
     opacity: 1;
+  }
+}
+
+/* L-08 (docs/plans/test-cases.md): below 768 px a `.table-cards` table shows one card per
+   row: the header row is hidden and each cell shows its column name (data-label) on the
+   left and its content on the right. From 768 px it is an ordinary table. Cells without
+   data-label (e.g. "No orders yet", colSpan) span the card. */
+@layer components {
+  @media (max-width: 767.98px) {
+    .table-cards {
+      min-width: 0 !important;
+    }
+    .table-cards thead {
+      display: none;
+    }
+    .table-cards,
+    .table-cards tbody,
+    .table-cards tr,
+    .table-cards td {
+      display: block;
+      width: 100%;
+    }
+    .table-cards tr {
+      padding: 0.5rem 0;
+    }
+    /* Column name on the left; the cell's own lines stacked on the right. */
+    .table-cards td[data-label] {
+      display: grid;
+      grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+      column-gap: 1rem;
+      justify-items: end;
+      align-items: baseline;
+      padding-top: 0.375rem;
+      padding-bottom: 0.375rem;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+    .table-cards td[data-label] > * {
+      grid-column: 2;
+    }
+    .table-cards td[data-label]::before {
+      content: attr(data-label);
+      grid-column: 1;
+      grid-row: 1 / span 12;
+      justify-self: start;
+      text-align: left;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgb(var(--c-ink-subtle));
+    }
   }
 }

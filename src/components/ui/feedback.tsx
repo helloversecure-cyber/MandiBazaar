@@ -148,7 +148,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 max-md:min-h-11"
                 onClick={() => close(false)}
               >
                 {dialog.cancelLabel || "Cancel"}
@@ -157,7 +157,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                 ref={confirmBtn}
                 type="button"
                 disabled={reasonTooShort}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 max-md:min-h-11 ${
                   danger ? "bg-red-600 hover:bg-red-700" : "bg-brand-600 hover:bg-brand-700"
                 }`}
                 onClick={() => close(true)}
@@ -171,7 +171,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-20 z-[110] flex flex-col items-center gap-2 px-4 sm:bottom-6 sm:items-end"
+        className="pointer-events-none fixed inset-x-0 bottom-20 z-[110] flex flex-col items-center gap-2 px-4 sm:items-end lg:bottom-6"
       >
         {toasts.map((t) => (
           <div
@@ -185,7 +185,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
             {t.action && (
               <button
                 type="button"
-                className="rounded-lg bg-white/20 px-2 py-1 text-xs font-bold hover:bg-white/30"
+                className="rounded-lg bg-white/20 px-2 py-1 text-xs font-bold hover:bg-white/30 max-md:min-h-11 max-md:px-3"
                 onClick={() => {
                   t.action?.onClick();
                   setToasts((all) => all.filter((x) => x.id !== t.id));

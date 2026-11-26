@@ -89,7 +89,7 @@ export default function RiderEarningsPage() {
       <section>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-muted">Delivery-wise earnings</h2>
         <div className="overflow-x-auto rounded-2xl border border-line bg-card">
-          <table className="w-full text-left text-sm">
+          <table className="table-cards w-full text-left text-sm">
             <thead className="bg-brand-50 dark:bg-brand-500/10 text-xs uppercase tracking-wide text-ink-subtle">
               <tr>
                 <th className="px-4 py-3">Order</th>
@@ -105,11 +105,11 @@ export default function RiderEarningsPage() {
               ) : (
                 data.deliveries.map((d) => (
                   <tr key={d.orderId}>
-                    <td className="px-4 py-3 font-semibold text-ink">{d.orderNumber}</td>
-                    <td className="px-4 py-3 text-xs text-ink-subtle">{d.deliveredAt ? new Date(d.deliveredAt).toLocaleDateString("en-PK") : "—"}</td>
-                    <td className="px-4 py-3 text-right text-ink-muted">{d.distanceKm != null ? `${d.distanceKm} km` : "—"}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{rs(d.pay)}</td>
-                    <td className="px-4 py-3">
+                    <td data-label="Order" className="px-4 py-3 font-semibold text-ink">{d.orderNumber}</td>
+                    <td data-label="Delivered" className="px-4 py-3 text-xs text-ink-subtle">{d.deliveredAt ? new Date(d.deliveredAt).toLocaleDateString("en-PK") : "—"}</td>
+                    <td data-label="Distance" className="px-4 py-3 text-right text-ink-muted">{d.distanceKm != null ? `${d.distanceKm} km` : "—"}</td>
+                    <td data-label="Fee" className="px-4 py-3 text-right font-semibold">{rs(d.pay)}</td>
+                    <td data-label="Status" className="px-4 py-3">
                       {d.paid ? (
                         <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">Paid</span>
                       ) : (
@@ -127,7 +127,7 @@ export default function RiderEarningsPage() {
       <section>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-muted">Payout history</h2>
         <div className="overflow-x-auto rounded-2xl border border-line bg-card">
-          <table className="w-full text-left text-sm">
+          <table className="table-cards w-full text-left text-sm">
             <thead className="bg-brand-50 dark:bg-brand-500/10 text-xs uppercase tracking-wide text-ink-subtle">
               <tr>
                 <th className="px-4 py-3">Paid on</th>
@@ -143,11 +143,11 @@ export default function RiderEarningsPage() {
               ) : (
                 data.payouts.map((p) => (
                   <tr key={p.id}>
-                    <td className="px-4 py-3 text-xs text-ink-muted">{p.paidAt ? new Date(p.paidAt).toLocaleDateString("en-PK") : "—"}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{rs(p.amount)}</td>
-                    <td className="px-4 py-3 text-right text-ink-muted">{p.deliveryCount}</td>
-                    <td className="px-4 py-3 text-xs text-ink-subtle">{p.method}</td>
-                    <td className="px-4 py-3 text-xs text-ink-subtle">{p.reference || "—"}</td>
+                    <td data-label="Paid on" className="px-4 py-3 text-xs text-ink-muted">{p.paidAt ? new Date(p.paidAt).toLocaleDateString("en-PK") : "—"}</td>
+                    <td data-label="Amount" className="px-4 py-3 text-right font-semibold">{rs(p.amount)}</td>
+                    <td data-label="Deliveries" className="px-4 py-3 text-right text-ink-muted">{p.deliveryCount}</td>
+                    <td data-label="Method" className="px-4 py-3 text-xs text-ink-subtle">{p.method}</td>
+                    <td data-label="Reference" className="px-4 py-3 text-xs text-ink-subtle">{p.reference || "—"}</td>
                   </tr>
                 ))
               )}
