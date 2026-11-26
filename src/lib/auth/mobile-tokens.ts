@@ -144,12 +144,17 @@ export async function revokeFamily(familyId: string): Promise<void> {
   });
 }
 
-/** Sign out: revoke the sign-in this refresh token belongs to. Unknown tokens are ignored. */
-export async function revokeRefreshToken(raw: string): Promise<void> {
-  if (!raw || raw.length > 200) return;
+/**
+ * Sign out: revoke the sign-in this refresh token belongs to. Unknown tokens are
+ * ignored. Returns the token's user (so the caller can scope other cleanup to them).
+ */
+export async function revokeRefreshToken(raw: string): Promise<string | null> {
+  if (!raw || raw.length > 200) return null;
   const row = await prisma.mobileRefreshToken.findUnique({
     where: { tokenHash: sha256(raw) },
-    select: { familyId: true },
+    select: { familyId: true, userId: true },
   });
-  if (row) await revokeFamily(row.familyId);
+  if (!row) return null;
+  await revokeFamily(row.familyId);
+  return row.userId;
 }
