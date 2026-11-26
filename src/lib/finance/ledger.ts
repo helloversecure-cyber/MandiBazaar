@@ -110,6 +110,33 @@ export async function recordOrderConfirmedLedger(db: Db, orderId: string): Promi
   await writeLedger(db, entries);
 }
 
+/**
+ * RIDER_EARNING for a rider chosen AFTER the order was confirmed (item-list
+ * orders: the rider's bid is accepted once the store has packed). The confirm
+ * snapshot above had no rider then, so the earning is journaled here instead.
+ * Idempotent: no-op when the order already has a (non-reversal) rider earning.
+ */
+export async function recordRiderEarningLedger(
+  db: Db,
+  opts: { orderId: string; riderId: string; amount: number; refId: string }
+): Promise<void> {
+  if (!(opts.amount > 0)) return;
+  const existing = await db.ledgerEntry.count({
+    where: { orderId: opts.orderId, type: "RIDER_EARNING", amount: { gt: 0 } },
+  });
+  if (existing > 0) return;
+  await writeLedger(db, [
+    {
+      type: "RIDER_EARNING",
+      orderId: opts.orderId,
+      riderId: opts.riderId,
+      amount: opts.amount,
+      refType: "rider_bid",
+      refId: opts.refId,
+    },
+  ]);
+}
+
 /** Record a customer payment (idempotent per payment reference). */
 export async function recordCustomerPaymentLedger(
   db: Db,

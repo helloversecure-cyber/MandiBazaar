@@ -32,7 +32,14 @@ export async function GET(req: NextRequest) {
         console.error("[cron] lists tick", e);
         return null;
       });
-    return apiSuccess({ ...result, lists });
+    // Daily backstop for rider bidding after packing (re-open once / give up).
+    const riderBids = await import("@/lib/orders/post-pack-bidding")
+      .then((m) => m.tickDuePostPackRequests({ limit: 500 }))
+      .catch((e) => {
+        console.error("[cron] post-pack rider bids tick", e);
+        return null;
+      });
+    return apiSuccess({ ...result, lists, riderBids });
   } catch (e) {
     console.error("[cron/expire-pending-payments]", e);
     return apiError("Expire job failed", 500);

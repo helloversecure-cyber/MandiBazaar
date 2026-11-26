@@ -31,6 +31,7 @@ import {
 } from "@/lib/finance/remittance";
 import { isUsableImageUrl } from "@/lib/orders/proof-review";
 import { recordRiderFeeForOrder } from "@/lib/riders/pay";
+import { parseRiderLocation, saveRiderLocation } from "@/lib/riders/location";
 
 function serializeOrder(o: {
   subtotal: unknown;
@@ -341,6 +342,14 @@ export async function PATCH(req: Request) {
         data: { status },
       });
       return apiSuccess(updated);
+    }
+
+    // Rider's current position (sent while online): nearby item-list deliveries are offered by distance.
+    if (action === "UPDATE_LOCATION") {
+      const loc = parseRiderLocation({ latitude: body.latitude, longitude: body.longitude });
+      if (!loc) return apiError("Invalid location", 400);
+      await saveRiderLocation(rider.id, loc);
+      return apiSuccess({ message: "Location updated" });
     }
 
     if (!orderId) return apiError("orderId required", 400);

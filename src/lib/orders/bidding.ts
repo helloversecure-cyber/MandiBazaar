@@ -13,16 +13,28 @@ import { isRiderEligibleForAssignment, riderBidEligibility } from "@/lib/riders/
 import { notifyBidAccepted } from "@/lib/notifications/bidding-events";
 
 const DEFAULT_BID_WINDOW_SECS = 180;
-const MAX_BID_AMOUNT = 10000; // sanity cap (PKR)
+export const MAX_BID_AMOUNT = 10000; // sanity cap (PKR)
 
 export class BiddingError extends Error {
   code: string;
-  constructor(code: string, message: string) {
+  /** HTTP status for the API (cart-checkout bidding keeps 400 everywhere). */
+  status: number;
+  constructor(code: string, message: string, status = 400) {
     super(message);
     this.code = code;
+    this.status = status;
     this.name = "BiddingError";
   }
 }
+
+/** Why a rider can't bid, in words (shared by cart and after-packing bidding). */
+export const RIDER_INELIGIBLE_MESSAGES: Record<string, string> = {
+  NOT_APPROVED: "Your rider account is still under review — you can bid once MandiBazaar approves you.",
+  SUSPENDED: "Your rider account is suspended. Please contact MandiBazaar support.",
+  OFFLINE: "You're offline. Go online from your dashboard to bid.",
+  BUSY: "You're on an active delivery. Finish it before bidding on new requests.",
+  COD_OVERDUE: "You have overdue COD cash to remit. Settle it to take new deliveries.",
+};
 
 export type DeliverySummary = {
   itemCount: number;
@@ -192,28 +204,52 @@ export async function getCustomerRequest(userId: string) {
   };
 }
 
-/** OPEN requests a rider can bid on, with this rider's own bid (if any). */
+/**
+ * OPEN requests a rider can bid on, with this rider's own bid (if any).
+ * Cart (CHECKOUT) requests are listed exactly as before; after-packing
+ * (POST_PACK) requests are only listed for riders near the pickup store.
+ */
 export async function listRequestsForRider(riderId: string) {
   // Only riders who could actually win a bid see (and can act on) open requests.
   const eligibility = await riderBidEligibility(riderId);
   if (!eligibility.eligible) {
     return { eligible: false as const, reason: eligibility.reason, requests: [] };
   }
+  const postPack = await import("@/lib/orders/post-pack-bidding");
+  // Lazy timers (Vercel Hobby has daily crons only): re-open / give up stale requests.
+  await postPack.tickDuePostPackRequests({ limit: 10 }).catch((e) => console.error("[rider-bids] tick", e));
+  const now = new Date();
   const reqs = await prisma.deliveryRequest.findMany({
-    where: { status: "OPEN", expiresAt: { gt: new Date() }, orderId: null },
+    where: {
+      status: "OPEN",
+      OR: [
+        { trigger: "CHECKOUT", orderId: null, expiresAt: { gt: now } },
+        {
+          trigger: "POST_PACK",
+          OR: [{ expiresAt: { gt: now } }, { bids: { some: { riderId, status: "PENDING" } } }],
+        },
+      ],
+    },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: { bids: { where: { riderId }, select: { id: true, amount: true, status: true } } },
   });
+  const near = await postPack.postPackVisibility(riderId, reqs, now);
   return {
     eligible: true as const,
     reason: null,
-    requests: reqs.map((r) => ({
-      id: r.id,
-      expiresAt: r.expiresAt,
-      summary: r.summary,
-      myBid: r.bids[0] ? { id: r.bids[0].id, amount: Number(r.bids[0].amount), status: r.bids[0].status } : null,
-    })),
+    requests: reqs
+      .filter((r) => r.trigger !== "POST_PACK" || near.has(r.id))
+      .map((r) => ({
+        id: r.id,
+        trigger: r.trigger,
+        expiresAt: r.expiresAt,
+        summary: r.summary,
+        ...(r.trigger === "POST_PACK"
+          ? { pickupDistanceKm: near.get(r.id) ?? null, biddingOpen: r.expiresAt.getTime() > now.getTime() }
+          : {}),
+        myBid: r.bids[0] ? { id: r.bids[0].id, amount: Number(r.bids[0].amount), status: r.bids[0].status } : null,
+      })),
   };
 }
 
@@ -225,21 +261,19 @@ export async function submitBid(opts: { riderId: string; requestId: string; amou
 
   const req = await prisma.deliveryRequest.findUnique({
     where: { id: opts.requestId },
-    select: { status: true, expiresAt: true },
+    select: { status: true, expiresAt: true, trigger: true },
   });
+  // After-packing requests (item-list orders) have their own rules (distance, 403s, edit window).
+  if (req?.trigger === "POST_PACK") {
+    const { submitPostPackBid } = await import("@/lib/orders/post-pack-bidding");
+    return submitPostPackBid({ ...opts, amount });
+  }
   if (!req || req.status !== "OPEN") throw new BiddingError("CLOSED", "This delivery request is no longer open.");
   if (req.expiresAt.getTime() <= Date.now()) throw new BiddingError("EXPIRED", "This delivery request has expired.");
 
   const eligibility = await riderBidEligibility(opts.riderId);
   if (!eligibility.eligible) {
-    const REASON_MSG: Record<string, string> = {
-      NOT_APPROVED: "Your rider account is still under review — you can bid once MandiBazaar approves you.",
-      SUSPENDED: "Your rider account is suspended. Please contact MandiBazaar support.",
-      OFFLINE: "You're offline. Go online from your dashboard to bid.",
-      BUSY: "You're on an active delivery. Finish it before bidding on new requests.",
-      COD_OVERDUE: "You have overdue COD cash to remit. Settle it to take new deliveries.",
-    };
-    throw new BiddingError("INELIGIBLE", REASON_MSG[eligibility.reason] || "You can't bid right now.");
+    throw new BiddingError("INELIGIBLE", RIDER_INELIGIBLE_MESSAGES[eligibility.reason] || "You can't bid right now.");
   }
 
   // Dedup via @@unique([deliveryRequestId, riderId]) — one active bid per rider.

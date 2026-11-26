@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { closePostPackRequest } from "@/lib/orders/post-pack-bidding";
 import { getSession, requireAdmin } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db";
 import {
@@ -795,6 +796,8 @@ export async function PATCH(req: Request) {
           update: { riderId: rid, assignedAt: new Date() },
         });
         await syncFulfillmentsToOrderStatus(tx, order.id, OrderStatus.ASSIGNED_TO_RIDER);
+        // Item-list orders: a manual assignment closes any open rider bidding (G-15).
+        await closePostPackRequest(tx, order.id);
       });
 
       const addr = order.deliveryAddressSnapshot as {
