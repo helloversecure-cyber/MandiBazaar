@@ -92,6 +92,10 @@ test.describe("signed in", () => {
     test(`L-03 ${path} total and main action on screen`, async ({ page }) => {
       test.skip(width(page) >= 768, "phone widths only");
       await openPage(page, path);
+      // The cart shows a grey skeleton until its data arrives (slow on a cold CI server).
+      await expect(
+        page.getByRole("button", { name: action }).or(page.getByRole("link", { name: action })).first()
+      ).toBeVisible({ timeout: 30_000 });
       for (const at of ["top", "middle"] as const) {
         if (at === "middle") {
           await page.evaluate(() =>
