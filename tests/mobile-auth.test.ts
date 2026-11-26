@@ -101,14 +101,14 @@ describeDb("mobile auth", () => {
     expect((await res.json()).data.user.role).toBe("RIDER");
   });
 
-  it("A-05 a rejected rider gets the rejection reason", async () => {
+  it("A-05 a rejected rider can sign in (to see the reason and re-apply)", async () => {
     await prisma.rider.update({
       where: { id: f.R3.id },
       data: { approvalStatus: "REJECTED", reviewNotes: "CNIC unreadable" },
     });
     const res = await signIn("rider.r3@test.local", "Correct#123", "rider");
-    expect(res.status).toBe(401);
-    expect((await res.json()).error).toBe("Application rejected: CNIC unreadable");
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.user.role).toBe("RIDER");
     await prisma.rider.update({ where: { id: f.R3.id }, data: { approvalStatus: "APPROVED", reviewNotes: null } });
   });
 
