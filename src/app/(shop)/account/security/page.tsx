@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -160,6 +161,13 @@ export default function SecurityPage() {
           </Button>
         </form>
       </div>
+
+      <p className="mx-auto mt-6 max-w-md text-center text-sm text-ink-muted">
+        Want to close your account?{" "}
+        <Link href="/account/delete" className="font-semibold text-red-600 hover:underline">
+          Delete account
+        </Link>
+      </p>
     </div>
   );
 }

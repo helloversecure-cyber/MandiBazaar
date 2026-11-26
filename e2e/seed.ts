@@ -28,6 +28,12 @@ async function main() {
       },
     });
   }
+  // One throwaway customer per width for the account-deletion browser test.
+  for (const w of [360, 390, 768, 1024, 1280, 1440]) {
+    await prisma.user.create({
+      data: { fullName: `Delete Me ${w}`, email: `delete.w${w}@test.local`, roleId: f.customerA.roleId, emailVerified: new Date() },
+    });
+  }
   console.log("e2e seed: fixtures + %d products", items.length);
 }
 
