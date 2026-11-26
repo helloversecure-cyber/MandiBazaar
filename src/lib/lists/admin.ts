@@ -9,7 +9,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { getListSettings, type ListSettings } from "@/lib/lists/settings";
-import { ListError } from "@/lib/lists/service";
+import { ListError, notifyBiddingStores } from "@/lib/lists/service";
+import { sendNotification } from "@/lib/notifications/service";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -242,6 +243,78 @@ export async function adminListDetail(listId: string) {
       detail: h.newValue ?? null,
     })),
   };
+}
+
+// ── Admin cancel (I-03) ─────────────────────────────────────────────────────
+
+export const adminListActionSchema = z.object({
+  action: z.literal("CANCEL", { error: "Unknown action" }),
+  reason: z
+    .string({ error: "Please give a reason" })
+    .trim()
+    .min(5, "Please give a reason (at least 5 characters)")
+    .max(500, "At most 500 characters"),
+});
+export type AdminListActionInput = z.infer<typeof adminListActionSchema>;
+
+/** Statuses an admin may cancel from. Once ACCEPTED it's an order (cancel the order instead). */
+const ADMIN_CANCELLABLE = ["BIDDING", "NO_STORES"] as const;
+
+/**
+ * Admin cancels a list that's still open (BIDDING or NO_STORES): CANCELLED,
+ * pending offers closed as NOT_SELECTED, customer and bidding stores notified,
+ * audit log with the reason.
+ */
+export async function adminCancelList(
+  actor: { id: string },
+  listId: string,
+  reason: string,
+  meta: { ipAddress?: string; userAgent?: string } = {}
+) {
+  const { list, bidStoreIds, previousStatus } = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "ItemList" WHERE id = ${listId} FOR UPDATE`;
+    const row = await tx.itemList.findUnique({
+      where: { id: listId },
+      select: { id: true, status: true, customerId: true, bids: { where: { status: "PENDING" }, select: { storeId: true } } },
+    });
+    if (!row) throw new ListError("NOT_FOUND", "List not found.", 404);
+    if (row.status === "ACCEPTED") {
+      throw new ListError("ORDER_PLACED", "The customer already accepted an offer. Cancel the order instead.", 409);
+    }
+    if (!(ADMIN_CANCELLABLE as readonly string[]).includes(row.status)) {
+      throw new ListError("LIST_CLOSED", "This list is already closed.", 409);
+    }
+    await tx.storeBid.updateMany({ where: { listId, status: "PENDING" }, data: { status: "NOT_SELECTED" } });
+    await tx.itemList.update({ where: { id: listId }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    return { list: row, bidStoreIds: row.bids.map((b) => b.storeId), previousStatus: row.status };
+  });
+
+  await writeAuditLog({
+    userId: actor.id,
+    action: "LIST_CANCELLED_BY_ADMIN",
+    entity: "ItemList",
+    entityId: listId,
+    previousValue: { status: previousStatus },
+    newValue: { status: "CANCELLED", reason, offersClosed: bidStoreIds.length },
+    ...meta,
+  }).catch((e) => console.error("[admin-lists] audit", e));
+
+  await sendNotification({
+    userId: list.customerId,
+    type: "LIST_CANCELLED",
+    title: "Your list was cancelled",
+    body: `MandiBazaar cancelled your list. Reason: ${reason}`,
+    metadata: { listId, byAdmin: true },
+  }).catch((e) => console.error("[admin-lists] notify customer", e));
+  await notifyBiddingStores(
+    bidStoreIds,
+    listId,
+    "LIST_CANCELLED",
+    "A list was cancelled",
+    "The list you made an offer on was cancelled by MandiBazaar."
+  );
+
+  return adminListDetail(listId);
 }
 
 // ── Needs rider queue (G-14 → G-15) ─────────────────────────────────────────

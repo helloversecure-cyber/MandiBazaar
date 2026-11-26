@@ -10,6 +10,16 @@ export const MAX_RIDER_FEE = 10_000;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Link to a list in the store portal. Pass the store when known (e.g. the
+ * fulfilment's store on an order) so an owner whose several stores got the same
+ * list goes straight to the right one instead of "choose which store".
+ */
+export function storeListHref(listId: string, storeId?: string | null): string {
+  const base = `/store-portal/lists/${encodeURIComponent(listId)}`;
+  return storeId ? `${base}?storeId=${encodeURIComponent(storeId)}` : base;
+}
+
 export type StoreBidView = {
   id: string;
   orderId?: string;

@@ -17,7 +17,7 @@ import { ChevronDown, ChevronUp, ClipboardList, Search } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Countdown } from "@/components/lists/ListBits";
-import { storeRiderStage } from "@/lib/lists/store-ui";
+import { storeListHref, storeRiderStage } from "@/lib/lists/store-ui";
 import { isStoreOrderTab } from "@/lib/stores/fulfillment-rules";
 
 type Item = {
@@ -32,6 +32,7 @@ type Item = {
 
 type Fulfillment = {
   id: string;
+  storeId: string;
   status: string;
   subtotal: number;
   itemCount: number;
@@ -300,7 +301,7 @@ export default function StoreOrdersPage() {
                   )}
                   {f.order.isListOrder && f.order.itemListId && (
                     <Link
-                      href={`/store-portal/lists/${f.order.itemListId}`}
+                      href={storeListHref(f.order.itemListId, f.storeId)}
                       className="mt-1 inline-flex items-center text-xs font-semibold text-brand-700 hover:underline max-md:min-h-[44px] dark:text-brand-300"
                     >
                       View the customer&apos;s list and your offer
