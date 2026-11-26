@@ -23,6 +23,26 @@ enum RiderBidStatus {
   EXPIRED
 }
 
+enum DeliveryRequestTrigger {
+  CHECKOUT
+  POST_PACK
+}
+
+enum ItemListStatus {
+  BIDDING
+  ACCEPTED
+  CANCELLED
+  NO_STORES
+  EXPIRED
+}
+
+enum StoreBidStatus {
+  PENDING
+  ACCEPTED
+  NOT_SELECTED
+  WITHDRAWN
+}
+
 enum LedgerEntryType {
   SALE
   COMMISSION
@@ -151,6 +171,8 @@ enum NotificationChannel {
   SMS
   WHATSAPP
   IN_APP
+  /// Firebase Cloud Messaging (Android app)
+  PUSH
 }
 
 enum NotificationStatus {
@@ -256,6 +278,10 @@ model User {
   ridersReviewed      Rider[]              @relation("RiderReviewedBy")
   riderProfile        Rider?
   onboardingDraft     OnboardingDraft?
+  itemLists           ItemList[]
+  storeReviews        StoreReview[]
+  deviceTokens        DeviceToken[]
+  mobileRefreshTokens MobileRefreshToken[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -357,6 +383,9 @@ model Store {
   orderItems            OrderItem[]
   fulfillments          StoreFulfillment[]
   payouts               Payout[]
+  listBroadcasts        ListBroadcast[]
+  storeBids             StoreBid[]
+  storeReviews          StoreReview[]
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
@@ -403,6 +432,7 @@ model Category {
   isActive    Boolean   @default(true)
   sortOrder   Int       @default(0)
   products    Product[]
+  itemListLines ItemListLine[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -455,6 +485,7 @@ model Product {
   /// Reason shown to the store owner when a product/change is declined or archived
   moderationNote    String?
   status            ProductStatus           @default(DRAFT)
+  itemListLines     ItemListLine[]
   images            ProductImage[]
   variants          ProductVariant[]
   inventoryTxns     InventoryTransaction[]
@@ -621,6 +652,11 @@ model Rider {
   /// They can still log in and remit, but cannot take new delivery assignments.
   codRestrictedAt      DateTime?
   codRestrictionReason String?
+  /// Last known position, sent by the rider app/portal while online. Used to
+  /// offer post-pack delivery requests only to nearby riders.
+  lastLatitude         Float?
+  lastLongitude        Float?
+  lastLocationAt       DateTime?
   orders          Order[]
   deliveries      Delivery[]
   riderPayouts    RiderPayout[]
@@ -679,6 +715,13 @@ model Order {
   deliveryRequest          DeliveryRequest?
   statusEvents             OrderStatusEvent[]
   confirmationTokens       DeliveryConfirmationToken[]
+  /// Set when the order was created by accepting a store's bid on an item list.
+  itemList                 ItemList?
+  /// Hash of the 4-digit code the customer gives the rider (item-list orders).
+  deliveryCodeHash         String?
+  deliveryCodeAttempts     Int                       @default(0)
+  deliveryCodeLockedUntil  DateTime?
+  storeReview              StoreReview?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
 
@@ -1159,6 +1202,22 @@ model StoreSettings {
   remittanceMethods          Json?
   /// Where riders hand cash over (supervisor name / location), shown on the handover screen.
   cashHandoverInstructions   String?
+  /// Item-list bidding (store bids on a customer's list). Off until UAT passes.
+  listBiddingEnabled         Boolean  @default(false)
+  /// Radius (km) a new list is first sent to, the maximum it widens to, the step,
+  /// and how often it widens when no store has bid.
+  listRadiusStartKm          Int      @default(5)
+  listRadiusMaxKm            Int      @default(20)
+  listRadiusStepKm           Int      @default(5)
+  listRadiusStepMins         Int      @default(30)
+  /// Maximum stores a list is sent to per radius step.
+  listMaxStores              Int      @default(20)
+  /// How long a list stays open for store bids before it expires (hours).
+  listExpiryHours            Int      @default(24)
+  /// Rider bidding window after the store packs an item-list order (seconds).
+  postPackBidWindowSecs      Int      @default(300)
+  /// Riders within this distance (km) of the pickup store see post-pack requests.
+  postPackRiderRadiusKm      Int      @default(10)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -1188,6 +1247,12 @@ model DeliveryRequest {
   acceptedBidId   String?
   acceptedRiderId String?
   acceptedFee     Decimal?              @db.Decimal(12, 2)
+  /// CHECKOUT = existing pre-checkout auction on a cart; POST_PACK = opened when
+  /// an item-list order is ready for pickup.
+  trigger         DeliveryRequestTrigger @default(CHECKOUT)
+  city            String?
+  /// Times this request was re-opened after getting no bids (POST_PACK only).
+  reopenCount     Int                   @default(0)
   bids            RiderBid[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -1275,4 +1340,161 @@ model LedgerEntry {
   @@index([storeId])
   @@index([riderId])
   @@index([type])
+}
+
+// ---------------------------------------------------------------------------
+// Item-list bidding: a customer posts a list, nearby stores bid, customer accepts
+// one bid and it becomes a normal Order. See docs/plans/.
+// ---------------------------------------------------------------------------
+
+model ItemList {
+  id              String          @id @default(cuid())
+  customerId      String
+  customer        User            @relation(fields: [customerId], references: [id])
+  status          ItemListStatus  @default(BIDDING)
+  /// Address the customer chose (same shape as Order.deliveryAddressSnapshot).
+  addressSnapshot Json
+  latitude        Float?
+  longitude       Float?
+  city            String
+  note            String?
+  /// Current broadcast radius and when it last widened.
+  radiusKm        Int             @default(5)
+  lastWidenedAt   DateTime        @default(now())
+  expiresAt       DateTime
+  /// Bumped on every customer edit; bids made on an older version must be updated.
+  version         Int             @default(1)
+  acceptedBidId   String?         @unique
+  orderId         String?         @unique
+  order           Order?          @relation(fields: [orderId], references: [id])
+  cancelledAt     DateTime?
+  lines           ItemListLine[]
+  broadcasts      ListBroadcast[]
+  bids            StoreBid[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([customerId])
+  @@index([status, city])
+  @@index([expiresAt])
+}
+
+model ItemListLine {
+  id         String         @id @default(cuid())
+  listId     String
+  list       ItemList       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  name       String
+  quantity   Decimal        @db.Decimal(10, 3)
+  unit       String
+  categoryId String?
+  category   Category?      @relation(fields: [categoryId], references: [id])
+  /// Set when the line was added from the catalog.
+  productId  String?
+  product    Product?       @relation(fields: [productId], references: [id])
+  note       String?
+  sortOrder  Int            @default(0)
+  bidLines   StoreBidLine[]
+
+  @@index([listId])
+}
+
+/// Which store received a list, at which radius, and what it did. Append-only record.
+model ListBroadcast {
+  id         String    @id @default(cuid())
+  listId     String
+  list       ItemList  @relation(fields: [listId], references: [id], onDelete: Cascade)
+  storeId    String
+  store      Store     @relation(fields: [storeId], references: [id])
+  radiusKm   Int
+  distanceKm Decimal?  @db.Decimal(8, 3)
+  sentAt     DateTime  @default(now())
+  seenAt     DateTime?
+  declinedAt DateTime?
+
+  @@unique([listId, storeId])
+  @@index([storeId])
+}
+
+/// A store's offer on a list. One per store per list; edits update it in place.
+model StoreBid {
+  id           String         @id @default(cuid())
+  listId       String
+  list         ItemList       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  storeId      String
+  store        Store          @relation(fields: [storeId], references: [id])
+  status       StoreBidStatus @default(PENDING)
+  /// Sum of quantity x unit price over available lines, before discount.
+  itemsTotal   Decimal        @db.Decimal(12, 2)
+  discount     Decimal        @default(0) @db.Decimal(12, 2)
+  prepMinutes  Int?
+  note         String?
+  coveredCount Int
+  /// ItemList.version this bid was made against.
+  listVersion  Int
+  lines        StoreBidLine[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([listId, storeId])
+  @@index([storeId])
+  @@index([status])
+}
+
+model StoreBidLine {
+  id        String       @id @default(cuid())
+  bidId     String
+  bid       StoreBid     @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  lineId    String
+  line      ItemListLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  available Boolean
+  unitPrice Decimal?     @db.Decimal(12, 2)
+
+  @@unique([bidId, lineId])
+}
+
+/// Customer's rating of the store after a delivered order.
+model StoreReview {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([storeId])
+}
+
+/// Firebase Cloud Messaging token of a signed-in app install.
+model DeviceToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  platform   String   @default("android")
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// App sign-in session. Only a hash of the refresh token is stored; rotated on use.
+model MobileRefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  /// All tokens from one sign-in share a family; reuse of a rotated token revokes the family.
+  familyId   String
+  deviceName String?
+  expiresAt  DateTime
+  rotatedAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
 }
