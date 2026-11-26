@@ -9,6 +9,7 @@ import type { RequestMeta } from "@/lib/auth/password-check";
 import { sendNotification } from "@/lib/notifications/service";
 import { getListSettings, listBiddingAllowedFor } from "@/lib/lists/settings";
 import type { CreateListInput, ListLineInput, UpdateListInput } from "@/lib/lists/validation";
+import { broadcastNewList, tickList } from "@/lib/lists/broadcast";
 
 export const MAX_LISTS_PER_HOUR = 10;
 
@@ -157,14 +158,19 @@ export async function createList(actor: Actor, input: CreateListInput, meta: Req
     ...meta,
   }).catch((e) => console.error("[lists] audit", e));
 
-  return serializeList(list);
+  // Send it to the nearest matching stores now (may widen, or end as NO_STORES).
+  await broadcastNewList(list.id);
+  const fresh = await prisma.itemList.findUniqueOrThrow({ where: { id: list.id }, include: listInclude });
+  return serializeList(fresh);
 }
 
 export async function getCustomerList(actor: Actor, id: string) {
-  const row = await prisma.itemList.findFirst({ where: { id, customerId: actor.id }, include: listInclude });
-  if (!row) throw new ListError("NOT_FOUND", "List not found.", 404);
-  const fresh = await expireIfDue(row);
-  return serializeList(fresh);
+  const owned = await prisma.itemList.findFirst({ where: { id, customerId: actor.id }, select: { id: true } });
+  if (!owned) throw new ListError("NOT_FOUND", "List not found.", 404);
+  // C-09: widen / expire on read when due (no always-on scheduler).
+  await tickList(id).catch((e) => console.error("[lists] tick", e));
+  const row = await prisma.itemList.findUniqueOrThrow({ where: { id }, include: listInclude });
+  return serializeList(await expireIfDue(row));
 }
 
 export async function listCustomerLists(actor: Actor, opts: { skip: number; take: number }) {
