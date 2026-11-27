@@ -2,6 +2,7 @@ import { requireAdmin, requireSuperAdmin } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db";
 import { productSchema } from "@/lib/validators/schemas";
 import { writeAuditLog } from "@/lib/audit";
+import { forgetSessionAccountStatus } from "@/lib/auth/session-status";
 import { adjustStock } from "@/lib/inventory/stock";
 import { slugify, apiError, apiSuccess, apiZodError, apiFieldErrors, toNumber, toUserMessage } from "@/lib/utils";
 import { PERMISSIONS, hasPermission } from "@/lib/auth/permissions";
@@ -345,6 +346,7 @@ export async function PATCH(req: Request) {
         where: { id },
         data: { isActive: data.isActive },
       });
+      forgetSessionAccountStatus(id);
       await writeAuditLog({
         userId: session.user.id,
         action: data.isActive ? "CUSTOMER_ACTIVATED" : "CUSTOMER_DEACTIVATED",

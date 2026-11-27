@@ -1,11 +1,15 @@
 /** W6: stores bid on lists (D-01 … D-17). S1 and S2 get the standard grocery list; S3 does not (8 km). */
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { prisma, resetDb } from "./helpers/db";
 import { describeDb } from "./helpers/describe-db";
 import { seedStandardFixtures, type Fixtures } from "./helpers/fixtures";
 import { createList, getCustomerList, updateList } from "@/lib/lists/service";
 import { createListSchema, updateListSchema } from "@/lib/lists/validation";
-import { bidSchema, declineList, listForStore, listsForStore, submitBid, withdrawBid } from "@/lib/lists/store-bids";
+import { OFFER_NOTIFY_THROTTLE_MS, bidSchema, declineList, listForStore, listsForStore, submitBid, withdrawBid } from "@/lib/lists/store-bids";
+import { storeFacingDistanceKm } from "@/lib/lists/broadcast";
+import { listItemsTotal, listLineTotal } from "@/lib/lists/line-total";
+import { acceptOffer, acceptOfferSchema } from "@/lib/lists/accept";
+import { offersForList } from "@/lib/lists/offers";
 
 describeDb("store bids", () => {
   let f: Fixtures;
@@ -190,5 +194,95 @@ describeDb("store bids", () => {
     await expect(submitBid(owner(f.S1), listId, full())).rejects.toMatchObject({ code: "STORE_REQUIRED" });
     await expect(submitBid(owner(f.S1), listId, { ...full(), storeId: f.S2.id })).resolves.toMatchObject({ status: "PENDING" });
     await expect(submitBid(owner(f.S1), listId, { ...full(), storeId: f.S3.id })).rejects.toMatchObject({ code: "NOT_YOUR_STORE" });
+  });
+  describe("security review", () => {
+    it("M2 stores see the customer's distance rounded to 0.5 km (never the exact metre)", async () => {
+      const set = (km: number) =>
+        prisma.listBroadcast.update({ where: { listId_storeId: { listId, storeId: f.S1.id } }, data: { distanceKm: km } });
+      for (const [exact, shown] of [[2.137, 2], [2.26, 2.5], [0.12, 0.5], [7.749, 7.5]] as const) {
+        await set(exact);
+        expect((await listForStore(owner(f.S1), listId)).distanceKm).toBe(shown);
+        const inbox = await listsForStore(owner(f.S1), { skip: 0, take: 10 });
+        expect(inbox.items[0].distanceKm).toBe(shown);
+        expect(JSON.stringify(inbox)).not.toContain(String(exact));
+      }
+      // the stored (internal) value keeps full precision
+      const b = await prisma.listBroadcast.findUniqueOrThrow({ where: { listId_storeId: { listId, storeId: f.S1.id } } });
+      expect(Number(b.distanceKm)).toBe(7.749);
+      // the "new list" push to stores is coarse too
+      const note = await prisma.notification.findFirstOrThrow({ where: { userId: f.S1.ownerId, type: "NEW_LIST" } });
+      expect(note.body).toMatch(/about \d+\.[05] km away/);
+    });
+
+    it("M2 storeFacingDistanceKm rounds to 0.5 km with a 0.5 km floor", () => {
+      expect(storeFacingDistanceKm(null)).toBeNull();
+      expect(storeFacingDistanceKm(0)).toBe(0.5);
+      expect(storeFacingDistanceKm(0.74)).toBe(0.5);
+      expect(storeFacingDistanceKm(0.76)).toBe(1);
+      expect(storeFacingDistanceKm(3.249)).toBe(3);
+      expect(storeFacingDistanceKm(3.25)).toBe(3.5);
+    });
+
+    it("L1 bid total and accept agree: 2 lines of Rs 33.33 x 1.5 = Rs 100.00 and the offer can be accepted", async () => {
+      expect(listLineTotal(33.33, 1.5)).toBe(50);
+      expect(listItemsTotal([{ unitPrice: 33.33, quantity: 1.5 }, { unitPrice: 33.33, quantity: 1.5 }])).toBe(100);
+      await prisma.storeSettings.updateMany({ data: { minimumOrderAmount: 0 } });
+      const l = await createList(
+        { id: f.customerA.id },
+        createListSchema.parse({
+          addressId: f.addressA.id,
+          lines: [
+            { name: "Daal", quantity: 1.5, unit: "kg" },
+            { name: "Chana", quantity: 1.5, unit: "kg" },
+          ],
+        })
+      );
+      const bid = await submitBid(
+        owner(f.S1),
+        l.id,
+        bidSchema.parse({ lines: l.lines.map((x) => ({ lineId: x.id, available: true, unitPrice: 33.33 })) })
+      );
+      expect(bid.itemsTotal).toBe(100);
+      const offer = (await offersForList(l.id)).find((o) => o.store.id === f.S1.id)!;
+      expect(offer.total).toBe(100);
+      expect(offer.lines.map((x) => x.lineTotal)).toEqual([50, 50]);
+      const order = await acceptOffer(
+        { id: f.customerA.id, email: f.customerA.email },
+        l.id,
+        acceptOfferSchema.parse({ bidId: bid.id, addressId: f.addressA.id, idempotencyKey: `l1-${Date.now()}`, expectedTotal: offer.total })
+      );
+      expect(order.productTotal).toBe(100);
+    });
+
+    it("L4 re-saving an unchanged offer doesn't notify; real changes notify at most once per 10 minutes", async () => {
+      const count = (type: string) => prisma.notification.count({ where: { userId: f.customerA.id, type } });
+      await submitBid(owner(f.S1), listId, full());
+      expect(await count("NEW_OFFER")).toBe(1);
+      // same prices again (and only the note changes): silent
+      await submitBid(owner(f.S1), listId, full());
+      await submitBid(owner(f.S1), listId, full([180, 230, 400], { note: "Fresh" }));
+      expect(await count("OFFER_UPDATED")).toBe(0);
+      // a price change notifies once
+      await submitBid(owner(f.S1), listId, full([170, 230, 400]));
+      expect(await count("OFFER_UPDATED")).toBe(1);
+      // more changes inside the window stay quiet
+      await submitBid(owner(f.S1), listId, full([160, 230, 400]));
+      await submitBid(owner(f.S1), listId, full([160, 230, 400], { discount: 10 }));
+      expect(await count("OFFER_UPDATED")).toBe(1);
+      // withdraw + offer again inside the window doesn't re-announce it
+      await withdrawBid(owner(f.S1), listId);
+      await submitBid(owner(f.S1), listId, full([150, 230, 400]));
+      expect(await count("NEW_OFFER")).toBe(1);
+      // once the window has passed, the next change notifies again
+      await prisma.notification.updateMany({
+        where: { userId: f.customerA.id },
+        data: { createdAt: new Date(Date.now() - OFFER_NOTIFY_THROTTLE_MS - 1000) },
+      });
+      await submitBid(owner(f.S1), listId, full([140, 230, 400]));
+      expect(await count("OFFER_UPDATED")).toBe(2);
+      // another store's offer is its own conversation
+      await submitBid(owner(f.S2), listId, full());
+      expect(await count("NEW_OFFER")).toBe(2);
+    });
   });
 });

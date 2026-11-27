@@ -11,6 +11,7 @@ import {
   portalAccessError,
   verifyPasswordWithLockout,
   type RequestMeta,
+  type VerifyOptions,
 } from "@/lib/auth/password-check";
 
 export type SignedInUser = {
@@ -24,14 +25,15 @@ export type SignedInUser = {
 
 export async function signInWithPassword(
   credentials: { identifier?: string; password?: string; portal?: string },
-  meta: RequestMeta
+  meta: RequestMeta,
+  opts: VerifyOptions = {}
 ): Promise<SignedInUser> {
   if (!credentials?.identifier || !credentials?.password) {
     throw new Error("Please provide login credentials");
   }
 
   // Same lookup + lockout counting as POST /api/auth/2fa/start
-  const user = await verifyPasswordWithLockout(credentials.identifier, credentials.password, meta);
+  const user = await verifyPasswordWithLockout(credentials.identifier, credentials.password, meta, opts);
 
   const portal = credentials.portal || "customer";
   const portalError = portalAccessError(portal, user.role.name);

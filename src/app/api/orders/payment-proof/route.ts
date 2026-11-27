@@ -5,9 +5,10 @@ import { notifyOrderEvent } from "@/lib/notifications/service";
 import { apiError, apiSuccess, toUserMessage } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { isUsableImageUrl } from "@/lib/orders/proof-review";
+import { isOwnUploadUrl } from "@/lib/uploads/neon-storage";
 
 /** Customer submits JazzCash Till/QR payment receipt for admin review */
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   const session = await getSession();
   if (!session?.user?.id) return apiError("Please sign in", 401);
 
@@ -23,38 +24,41 @@ export async function POST(req: Request) {
       typeof body.notes === "string" ? body.notes.trim().slice(0, 500) : "";
 
     if (!orderId) return apiError("orderId required");
-    if (!isUsableImageUrl(imageUrl)) {
+    // L5: only a receipt uploaded through our own /api/upload is accepted.
+    if (!isUsableImageUrl(imageUrl) || !isOwnUploadUrl(imageUrl)) {
       return apiError("Please upload a valid receipt image");
     }
 
-    const order = await prisma.order.findFirst({
-      where: { id: orderId, customerId: session.user.id },
-      include: {
-        paymentProofs: {
-          where: { status: "PENDING_REVIEW" },
-          take: 1,
+    // L6: lock the order row so two submits at once can't both see "no pending
+    // receipt" and create two (the second waits, then sees the first).
+    const outcome = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Order" WHERE id = ${orderId} AND "customerId" = ${session.user.id} FOR UPDATE`;
+      if (locked.length === 0) return { ok: false, error: apiError("Order not found", 404) } as const;
+      const order = await tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        select: { id: true, orderNumber: true, orderStatus: true },
+      });
+      if (order.orderStatus !== "PENDING_PAYMENT") {
+        return { ok: false, error: apiError("This order does not need a payment receipt right now") } as const;
+      }
+      const pending = await tx.paymentProof.count({ where: { orderId: order.id, status: "PENDING_REVIEW" } });
+      if (pending > 0) {
+        return { ok: false, error: apiError("A receipt is already waiting for admin review. Please wait.") } as const;
+      }
+      const proof = await tx.paymentProof.create({
+        data: {
+          orderId: order.id,
+          imageUrl,
+          notes: notes || "Customer JazzCash Till/QR receipt",
+          status: "PENDING_REVIEW",
+          uploadedById: session.user.id,
         },
-      },
+      });
+      return { ok: true, order, proof } as const;
     });
-    if (!order) return apiError("Order not found", 404);
-    if (order.orderStatus !== "PENDING_PAYMENT") {
-      return apiError("This order does not need a payment receipt right now");
-    }
-    if (order.paymentProofs.length > 0) {
-      return apiError(
-        "A receipt is already waiting for admin review. Please wait."
-      );
-    }
-
-    const proof = await prisma.paymentProof.create({
-      data: {
-        orderId: order.id,
-        imageUrl,
-        notes: notes || "Customer JazzCash Till/QR receipt",
-        status: "PENDING_REVIEW",
-        uploadedById: session.user.id,
-      },
-    });
+    if (!outcome.ok) return outcome.error;
+    const { order, proof } = outcome;
 
     await writeAuditLog({
       userId: session.user.id,

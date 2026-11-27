@@ -39,6 +39,16 @@ type ListForMatch = {
   lines: { categoryId: string | null }[];
 };
 
+/**
+ * The customer's distance as a store may see it: rounded to the nearest 0.5 km
+ * (never below 0.5). The exact figure stays internal (ordering, admin) — exact
+ * distances from several stores would let them trilaterate the customer's home.
+ */
+export function storeFacingDistanceKm(km: number | null | undefined): number | null {
+  if (km == null || !Number.isFinite(Number(km))) return null;
+  return Math.max(0.5, Math.round(Number(km) * 2) / 2);
+}
+
 export type StoreMatch = { storeId: string; ownerId: string; distanceKm: number | null };
 
 const sameCity = (a: string | null | undefined, b: string | null | undefined) =>
@@ -139,7 +149,7 @@ async function sendToStores(
 const newListNote = (lineCount: number, area: string) => (m: StoreMatch) => ({
   type: "NEW_LIST",
   title: "New list near you",
-  body: `A customer${m.distanceKm != null ? ` ${m.distanceKm.toFixed(1)} km away` : ""} in ${area} needs ${lineCount} item${lineCount === 1 ? "" : "s"}. Send your offer.`,
+  body: `A customer${m.distanceKm != null ? ` about ${storeFacingDistanceKm(m.distanceKm)!.toFixed(1)} km away` : ""} in ${area} needs ${lineCount} item${lineCount === 1 ? "" : "s"}. Send your offer.`,
 });
 
 async function loadList(listId: string) {

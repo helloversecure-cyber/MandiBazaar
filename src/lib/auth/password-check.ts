@@ -69,6 +69,19 @@ export async function recordFailedSignIn(
   return { attempts, locked, attemptsLeft: Math.max(0, MAX_FAILED_LOGINS - attempts) };
 }
 
+export type VerifyOptions = {
+  /** Roles this caller never signs in (e.g. admins in the Android app). */
+  refuseRole?: (role: RoleName) => boolean;
+};
+
+/** The account exists but this sign-in route doesn't serve its role. */
+export class SignInRefusedError extends Error {
+  constructor() {
+    super("SIGN_IN_REFUSED");
+    this.name = "SignInRefusedError";
+  }
+}
+
 /**
  * Email + password login via Firebase Authentication (the source of truth).
  *  - New users: created in Firebase at signup; must verify their email first.
@@ -80,7 +93,8 @@ export async function recordFailedSignIn(
 export async function verifyPasswordWithLockout(
   identifier: unknown,
   password: unknown,
-  meta: RequestMeta
+  meta: RequestMeta,
+  opts: VerifyOptions = {}
 ): Promise<SignInUser> {
   if (typeof identifier !== "string" || typeof password !== "string" || !identifier || !password) {
     throw new Error("Please provide login credentials");
@@ -104,6 +118,9 @@ export async function verifyPasswordWithLockout(
         });
   // Don't reveal which part is wrong
   if (!user) throw new Error("Invalid credentials");
+  // Refused before the password is checked: no lockout counting, no Firebase call,
+  // and the answer doesn't depend on whether the password was right.
+  if (opts.refuseRole?.(user.role.name)) throw new SignInRefusedError();
 
   const email = user.email;
   if (!email) {

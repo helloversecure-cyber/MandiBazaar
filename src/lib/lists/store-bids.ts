@@ -11,9 +11,10 @@ import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/auth/password-check";
 import { sendNotification } from "@/lib/notifications/service";
-import { tickList } from "@/lib/lists/broadcast";
+import { storeFacingDistanceKm, tickList } from "@/lib/lists/broadcast";
 import { ListError } from "@/lib/lists/service";
 import { formatCurrency } from "@/lib/utils";
+import { listItemsTotal } from "@/lib/lists/line-total";
 
 export const MAX_UNIT_PRICE = 1_000_000;
 
@@ -165,7 +166,7 @@ export async function listsForStore(actor: Actor, opts: { storeId?: string | nul
         storeId: b.storeId,
         status: b.list.status,
         ...publicArea(b.list.addressSnapshot, b.list.city),
-        distanceKm: b.distanceKm == null ? null : Number(b.distanceKm),
+        distanceKm: storeFacingDistanceKm(b.distanceKm == null ? null : Number(b.distanceKm)),
         lineCount: b.list._count.lines,
         expiresAt: b.list.expiresAt,
         round: b.list.round,
@@ -203,7 +204,7 @@ export async function listForStore(actor: Actor, listId: string, storeIdParam?: 
     status: list.status,
     version: list.version,
     ...publicArea(list.addressSnapshot, list.city),
-    distanceKm: broadcast.distanceKm == null ? null : Number(broadcast.distanceKm),
+    distanceKm: storeFacingDistanceKm(broadcast.distanceKm == null ? null : Number(broadcast.distanceKm)),
     note: list.note,
     expiresAt: list.expiresAt,
     round: list.round,
@@ -237,13 +238,55 @@ async function lockForStore(tx: Prisma.TransactionClient, listId: string, storeI
   return list;
 }
 
+/** At most one "new/updated offer" message per offer in this window. */
+export const OFFER_NOTIFY_THROTTLE_MS = 10 * 60 * 1000;
+
+type OfferShape = {
+  itemsTotal: number;
+  discount: number;
+  lines: { lineId: string; available: boolean; unitPrice: number | null }[];
+};
+
+/** Did the total, the discount or any item's availability/price change? */
+function offerChanged(
+  before: { itemsTotal: Prisma.Decimal; discount: Prisma.Decimal; lines: { lineId: string; available: boolean; unitPrice: Prisma.Decimal | null }[] },
+  after: OfferShape
+): boolean {
+  if (Number(before.itemsTotal) !== after.itemsTotal || Number(before.discount) !== after.discount) return true;
+  if (before.lines.length !== after.lines.length) return true;
+  const prev = new Map(before.lines.map((l) => [l.lineId, l]));
+  return after.lines.some((l) => {
+    const p = prev.get(l.lineId);
+    const pPrice = p?.unitPrice == null ? null : Number(p.unitPrice);
+    return !p || p.available !== l.available || pPrice !== l.unitPrice;
+  });
+}
+
+async function notifiedRecently(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  bidId: string,
+  types: string[]
+): Promise<boolean> {
+  const recent = await tx.notification.findFirst({
+    where: {
+      userId: customerId,
+      type: { in: types },
+      createdAt: { gt: new Date(Date.now() - OFFER_NOTIFY_THROTTLE_MS) },
+      metadata: { path: ["bidId"], equals: bidId },
+    },
+    select: { id: true },
+  });
+  return !!recent;
+}
+
 /** Make or update this store's offer (D-03 … D-11, D-15, D-17). */
 export async function submitBid(actor: Actor, listId: string, input: BidInput, meta: RequestMeta = {}) {
   const storeId = await resolveStore(actor, listId, input.storeId);
   // A round that just ended restarts first, so this offer lands in the new round.
   await tickList(listId).catch((e) => console.error("[store-bids] tick", e));
 
-  const { bid, created, customerId, version } = await prisma.$transaction(async (tx) => {
+  const { bid, created, notify, customerId, version } = await prisma.$transaction(async (tx) => {
     const list = await lockForStore(tx, listId, storeId);
     if (input.listVersion != null && input.listVersion !== list.version) {
       throw new ListError("LIST_CHANGED", "The list has changed. Reload it and answer every item.", 409);
@@ -255,7 +298,7 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
       throw new ListError("LIST_CHANGED", "The list has changed. Reload it and answer every item.", 409);
     }
 
-    let itemsTotal = 0;
+    const priced: { unitPrice: number; quantity: number }[] = [];
     let covered = 0;
     for (const [i, l] of Array.from(list.lines.entries())) {
       const a = byId.get(l.id)!;
@@ -265,10 +308,10 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
         throw new ListError("BAD_PRICE", `Enter a price for ${l.name}.`, 400, `lines.${i}.unitPrice`);
       }
       if (price > MAX_UNIT_PRICE) throw new ListError("BAD_PRICE", `The price for ${l.name} is too high.`, 400, `lines.${i}.unitPrice`);
-      itemsTotal += round2(price) * Number(l.quantity);
+      priced.push({ unitPrice: price, quantity: Number(l.quantity) });
       covered++;
     }
-    itemsTotal = round2(itemsTotal);
+    const itemsTotal = listItemsTotal(priced);
     if (covered === 0) {
       throw new ListError("NOTHING_AVAILABLE", "You don't have any of these items — use \"Can't supply\" instead.", 400);
     }
@@ -277,7 +320,14 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
       throw new ListError("BAD_DISCOUNT", "The discount must be less than the total.", 400, "discount");
     }
 
-    const existing = await tx.storeBid.findUnique({ where: { listId_storeId_round: { listId, storeId, round: list.round } } });
+    const existing = await tx.storeBid.findUnique({
+      where: { listId_storeId_round: { listId, storeId, round: list.round } },
+      include: { lines: true },
+    });
+    const newLines = list.lines.map((l) => {
+      const a = byId.get(l.id)!;
+      return { lineId: l.id, available: a.available, unitPrice: a.available ? round2(a.unitPrice!) : null };
+    });
     const data = {
       status: "PENDING" as const,
       itemsTotal,
@@ -291,15 +341,20 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
       ? await tx.storeBid.update({ where: { id: existing.id }, data })
       : await tx.storeBid.create({ data: { listId, storeId, round: list.round, ...data } });
     await tx.storeBidLine.deleteMany({ where: { bidId: bid.id } });
-    await tx.storeBidLine.createMany({
-      data: list.lines.map((l) => {
-        const a = byId.get(l.id)!;
-        return { bidId: bid.id, lineId: l.id, available: a.available, unitPrice: a.available ? round2(a.unitPrice!) : null };
-      }),
-    });
+    await tx.storeBidLine.createMany({ data: newLines.map((l) => ({ bidId: bid.id, ...l })) });
     // Offering after "can't supply" undoes the decline.
     await tx.listBroadcast.update({ where: { listId_storeId: { listId, storeId } }, data: { declinedAt: null } });
-    return { bid, created: !existing || existing.status !== "PENDING", customerId: list.customerId, version: list.version };
+    const created = !existing || existing.status !== "PENDING";
+    // L4: tell the customer only when what they'd pay or get changed, and at most
+    // once per offer every OFFER_NOTIFY_THROTTLE_MS (re-saving the same offer is silent).
+    const changed = created || offerChanged(existing!, { itemsTotal, discount, lines: newLines });
+    // A brand-new offer always notifies; an update notifies at most once per window
+    // (and re-offering after a withdraw counts the earlier "new offer" message too).
+    const notify =
+      changed &&
+      (!existing ||
+        !(await notifiedRecently(tx, list.customerId, bid.id, created ? ["NEW_OFFER", "OFFER_UPDATED"] : ["OFFER_UPDATED"])));
+    return { bid, created, notify, customerId: list.customerId, version: list.version };
   });
 
   await writeAuditLog({
@@ -311,14 +366,16 @@ export async function submitBid(actor: Actor, listId: string, input: BidInput, m
     ...meta,
   }).catch((e) => console.error("[store-bids] audit", e));
 
-  const total = round2(Number(bid.itemsTotal) - Number(bid.discount));
-  await sendNotification({
-    userId: customerId,
-    type: created ? "NEW_OFFER" : "OFFER_UPDATED",
-    title: created ? "New offer on your list" : "An offer on your list was updated",
-    body: `A store offers ${bid.coveredCount} item${bid.coveredCount === 1 ? "" : "s"} for ${formatCurrency(total)}.`,
-    metadata: { listId },
-  }).catch(() => {});
+  if (notify) {
+    const total = round2(Number(bid.itemsTotal) - Number(bid.discount));
+    await sendNotification({
+      userId: customerId,
+      type: created ? "NEW_OFFER" : "OFFER_UPDATED",
+      title: created ? "New offer on your list" : "An offer on your list was updated",
+      body: `A store offers ${bid.coveredCount} item${bid.coveredCount === 1 ? "" : "s"} for ${formatCurrency(total)}.`,
+      metadata: { listId, bidId: bid.id },
+    }).catch(() => {});
+  }
 
   const full = await prisma.storeBid.findUniqueOrThrow({ where: { id: bid.id }, include: { lines: true } });
   return serializeBid(full, version)!;

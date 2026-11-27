@@ -299,9 +299,21 @@ export async function acceptBid(userId: string, bidId: string) {
   return prisma.$transaction(async (tx) => {
     const bid = await tx.riderBid.findUnique({
       where: { id: bidId },
-      include: { deliveryRequest: { select: { id: true, customerId: true, status: true, expiresAt: true } } },
+      include: {
+        deliveryRequest: {
+          select: { id: true, customerId: true, status: true, expiresAt: true, trigger: true, orderId: true },
+        },
+      },
     });
-    if (!bid || bid.deliveryRequest.customerId !== userId) {
+    // Only cart-checkout requests are accepted here. After-packing (POST_PACK)
+    // requests carry the customer's id too, but they are settled through the
+    // order's own rider-bid flow — accepting one here would strand the order.
+    if (
+      !bid ||
+      bid.deliveryRequest.customerId !== userId ||
+      bid.deliveryRequest.trigger !== "CHECKOUT" ||
+      bid.deliveryRequest.orderId !== null
+    ) {
       throw new BiddingError("NOT_FOUND", "That bid is no longer available.");
     }
     if (bid.deliveryRequest.status !== "OPEN") {
@@ -352,7 +364,13 @@ export async function acceptBid(userId: string, bidId: string) {
 /** Customer cancels their open/assigned request (retry or abandon). */
 export async function cancelRequest(userId: string, requestId: string) {
   await prisma.deliveryRequest.updateMany({
-    where: { id: requestId, customerId: userId, orderId: null, status: { in: ["OPEN", "ASSIGNED"] } },
+    where: {
+      id: requestId,
+      customerId: userId,
+      trigger: "CHECKOUT",
+      orderId: null,
+      status: { in: ["OPEN", "ASSIGNED"] },
+    },
     data: { status: "CANCELLED" },
   });
 }

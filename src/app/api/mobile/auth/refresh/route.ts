@@ -1,4 +1,5 @@
-import { rotateRefreshToken } from "@/lib/auth/mobile-tokens";
+import { revokeRefreshToken, rotateRefreshToken } from "@/lib/auth/mobile-tokens";
+import { isPlatformAdminRole } from "@/lib/auth/permissions";
 import { buildMobileSession } from "@/lib/auth/mobile-session-response";
 import { prisma } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -22,8 +23,16 @@ export async function POST(req: Request) {
   const result = await rotateRefreshToken(raw);
   if (!result.ok) return apiError("Please sign in again.", 401, `REFRESH_${result.reason}`);
 
-  const user = await prisma.user.findUnique({ where: { id: result.userId }, select: { isActive: true } });
-  if (!user?.isActive) return apiError("Please sign in again.", 401, "ACCOUNT_INACTIVE");
+  const user = await prisma.user.findUnique({
+    where: { id: result.userId },
+    select: { isActive: true, role: { select: { name: true } } },
+  });
+  // Inactive accounts and admin roles (the app never holds admin sessions) end
+  // here, and the token just issued by the rotation is revoked with its family.
+  if (!user?.isActive || isPlatformAdminRole(user.role.name)) {
+    await revokeRefreshToken(result.refresh.token);
+    return apiError("Please sign in again.", 401, user?.isActive ? "PORTAL_NOT_IN_APP" : "ACCOUNT_INACTIVE");
+  }
 
   return apiSuccess(await buildMobileSession(result.userId, result.refresh));
 }
