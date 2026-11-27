@@ -29,5 +29,7 @@ declare module "next-auth/jwt" {
     mustChangePassword?: boolean;
     /** Store owner has at least one APPROVED store (false while pending/rejected). */
     storeApproved?: boolean;
+    /** When the account's active flag / role were last re-checked (ms epoch). */
+    checkedAt?: number;
   }
 }

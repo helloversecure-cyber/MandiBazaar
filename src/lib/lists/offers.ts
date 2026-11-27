@@ -7,6 +7,7 @@
  * commission or any other store's private data.
  */
 import { prisma } from "@/lib/db";
+import { listLineTotal } from "@/lib/lists/line-total";
 import { computeDeliveryFee, getDeliverySettings } from "@/lib/orders/delivery-fee";
 import { ratingOf, storeRatings } from "@/lib/stores/reviews";
 
@@ -16,7 +17,9 @@ export type OfferTag = "LOWEST_PRICE" | "FASTEST";
 
 export type CustomerOffer = {
   bidId: string;
-  status: "PENDING" | "ACCEPTED" | "NOT_SELECTED";
+  status: "PENDING" | "ACCEPTED" | "NOT_SELECTED" | "EXPIRED";
+  /** Offer round this offer belongs to (always the list's current round). */
+  round: number;
   /** False when the store must update the offer first (list edited after it bid, D-17 / E-07). */
   acceptable: boolean;
   needsUpdate: boolean;
@@ -87,7 +90,11 @@ export function tagOffers<T extends { acceptable: boolean; total: number; prepMi
   return offers;
 }
 
-/** Offers on one list (caller has already checked the customer owns it). Withdrawn offers are hidden (D-13). */
+/**
+ * Offers on one list in its current round (caller has already checked the customer
+ * owns it). Withdrawn offers are hidden (D-13); earlier rounds' offers are kept as
+ * EXPIRED records but not shown.
+ */
 export async function offersForList(listId: string): Promise<CustomerOffer[]> {
   const list = await prisma.itemList.findUniqueOrThrow({
     where: { id: listId },
@@ -99,12 +106,14 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
       city: true,
       addressSnapshot: true,
       expiresAt: true,
+      round: true,
       lines: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true, quantity: true, unit: true } },
       broadcasts: { select: { storeId: true, distanceKm: true } },
       bids: {
-        where: { status: { in: ["PENDING", "ACCEPTED", "NOT_SELECTED"] } },
+        where: { status: { in: ["PENDING", "ACCEPTED", "NOT_SELECTED", "EXPIRED"] } },
         select: {
           id: true,
+          round: true,
           status: true,
           storeId: true,
           itemsTotal: true,
@@ -123,16 +132,17 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
       },
     },
   });
-  if (!list.bids.length) return [];
+  const bids = list.bids.filter((b) => b.round === list.round);
+  if (!bids.length) return [];
 
-  const storeIds = list.bids.map((b) => b.storeId);
+  const storeIds = bids.map((b) => b.storeId);
   // W9: real customer ratings (StoreReview), shared with the public store pages.
   const [ratingBy, deliverySettings] = await Promise.all([storeRatings(storeIds), getDeliverySettings()]);
   const distanceBy = new Map(list.broadcasts.map((b) => [b.storeId, b.distanceKm == null ? null : Number(b.distanceKm)]));
   const open = list.status === "BIDDING" && list.expiresAt.getTime() > Date.now();
   const area = (list.addressSnapshot as { area?: string } | null)?.area ?? "";
 
-  const offers = list.bids.map((b): CustomerOffer => {
+  const offers = bids.map((b): CustomerOffer => {
     const answers = new Map(b.lines.map((l) => [l.lineId, l]));
     const lines = list.lines.map((l) => {
       const a = answers.get(l.id);
@@ -146,7 +156,7 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
         unit: l.unit,
         available,
         unitPrice,
-        lineTotal: unitPrice == null ? null : round2(unitPrice * quantity),
+        lineTotal: unitPrice == null ? null : listLineTotal(unitPrice, quantity),
       };
     });
     const itemsTotal = Number(b.itemsTotal);
@@ -168,6 +178,7 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
     return {
       bidId: b.id,
       status: b.status as CustomerOffer["status"],
+      round: b.round,
       acceptable: open && b.status === "PENDING" && !needsUpdate && b.store.status === "APPROVED",
       needsUpdate,
       store: {

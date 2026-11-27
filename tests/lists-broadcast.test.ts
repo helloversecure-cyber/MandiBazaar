@@ -115,13 +115,14 @@ describeDb("list broadcast", () => {
     expect(await sentTo(l.id)).toContain("TEST S3");
   });
 
-  it("C-08 nothing at 20 km and no offer: NO_STORES and the customer is told", async () => {
+  it("C-08 nothing new up to 20 km and no offer: stays open for the full window (stores already have it)", async () => {
     const l = await groceryList();
     expect(await tickList(l.id, minutes(31))).toBe("WIDENED"); // → 10 km, S3
-    // Nothing new at 15 or 20 km → straight to NO_STORES.
-    expect(await tickList(l.id, minutes(62))).toBe("NO_STORES");
-    expect((await prisma.itemList.findUniqueOrThrow({ where: { id: l.id } })).status).toBe("NO_STORES");
-    expect(await prisma.notification.count({ where: { userId: f.customerA.id, type: "LIST_NO_STORES" } })).toBe(1);
+    // Nothing new at 15 or 20 km: reaches 20 km but keeps waiting for offers.
+    expect(await tickList(l.id, minutes(62))).toBe("UNCHANGED");
+    const row = await prisma.itemList.findUniqueOrThrow({ where: { id: l.id } });
+    expect(row).toMatchObject({ status: "BIDDING", radiusKm: 20 });
+    expect(await prisma.notification.count({ where: { userId: f.customerA.id, type: "LIST_NO_STORES" } })).toBe(0);
   });
 
   it("C-08 a list with no store anywhere ends as NO_STORES as soon as it's sent", async () => {
@@ -159,7 +160,8 @@ describeDb("list broadcast", () => {
     expect(ok.status).toBe(200);
   });
 
-  it("an expired list is closed by the tick", async () => {
+  it("an expired list is closed by the tick (at max rounds)", async () => {
+    await prisma.storeSettings.updateMany({ data: { listMaxRounds: 1 } });
     const l = await groceryList();
     await prisma.itemList.update({ where: { id: l.id }, data: { expiresAt: minutes(-1) } });
     expect(await tickList(l.id)).toBe("EXPIRED");

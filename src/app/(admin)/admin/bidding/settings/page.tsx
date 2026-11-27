@@ -14,6 +14,7 @@ type Settings = {
   radiusStepMins: number;
   maxStores: number;
   expiryHours: number;
+  maxRounds: number;
   postPackBidWindowSecs: number;
   postPackRiderRadiusKm: number;
   betaEmails: string[];
@@ -26,7 +27,18 @@ const FIELDS: { key: NumKey; label: string; unit: string; help: string }[] = [
   { key: "radiusStepMins", label: "Widen after", unit: "minutes", help: "Wait this long without an offer before widening." },
   { key: "radiusMaxKm", label: "Largest radius", unit: "km", help: "The radius never grows past this." },
   { key: "maxStores", label: "Stores per list", unit: "stores", help: "At most this many stores get each list." },
-  { key: "expiryHours", label: "List open for", unit: "hours", help: "Lists close after this long if the customer hasn't accepted an offer." },
+  {
+    key: "expiryHours",
+    label: "Offer window",
+    unit: "hours",
+    help: "Each round the customer has this long to accept an offer (48 by default). If they don't, the list restarts for a new round.",
+  },
+  {
+    key: "maxRounds",
+    label: "Max rounds",
+    unit: "0 = unlimited",
+    help: "After this many rounds without an accept the list closes as expired. 0 keeps restarting until accepted or cancelled.",
+  },
   {
     key: "postPackBidWindowSecs",
     label: "Rider bidding window",

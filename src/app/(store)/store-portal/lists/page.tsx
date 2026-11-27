@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, Clock, MapPin, Package, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
-import { Countdown } from "@/components/lists/ListBits";
+import { Countdown, RoundBadge } from "@/components/lists/ListBits";
 import { listOpen, storeListState, type StoreListRow } from "@/lib/lists/store-ui";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -152,11 +152,12 @@ function ListRowCard({ row, onEnd }: { row: StoreListRow; onEnd: () => void }) {
             {state.label}
           </Badge>
           {!row.seen && open && <Badge tone="warning">New</Badge>}
+          {open && <RoundBadge round={row.round} />}
         </div>
         {open ? (
           <span className="flex items-center gap-1 text-xs font-medium text-ink-muted">
             <Clock className="h-3.5 w-3.5" />
-            <Countdown until={row.expiresAt} onEnd={onEnd} />
+            <Countdown until={row.roundEndsAt ?? row.expiresAt} onEnd={onEnd} />
           </span>
         ) : (
           <span className="text-xs text-ink-subtle">{new Date(row.sentAt).toLocaleDateString("en-PK")}</span>

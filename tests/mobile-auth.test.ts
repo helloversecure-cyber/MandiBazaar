@@ -105,6 +105,34 @@ describeDb("mobile auth", () => {
     expect(await prisma.mobileRefreshToken.count({ where: { userId: f.admin.id } })).toBe(0);
   });
 
+  it("L2 admin app sign-in is refused before any side effect, whatever the password", async () => {
+    await prisma.user.update({ where: { id: f.admin.id }, data: { lastLoginAt: null, failedLoginAttempts: 0 } });
+    const audits = () => prisma.auditLog.count({ where: { action: "ADMIN_SIGN_IN", userId: f.admin.id } });
+    const before = await audits();
+    const right = await signIn("admin@test.local", "Correct#123", "customer");
+    const wrong = await signIn("admin@test.local", "nope", "customer");
+    for (const res of [right, wrong]) {
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("PORTAL_NOT_IN_APP");
+    }
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: f.admin.id } });
+    expect(u.lastLoginAt).toBeNull();
+    expect(u.failedLoginAttempts).toBe(0);
+    expect(await audits()).toBe(before);
+  });
+
+  it("L2 an admin can't use an app refresh token or bearer token", async () => {
+    const { issueAccessToken, issueRefreshToken } = await import("@/lib/auth/mobile-tokens");
+    const access = await issueAccessToken({ id: f.admin.id, role: "SUPER_ADMIN", phone: null, mustChangePassword: false });
+    expect(await sessionFromBearer(`Bearer ${access.token}`)).toBeNull();
+    const rt = await issueRefreshToken(f.admin.id);
+    const res = await post(refresh, { refreshToken: rt.token });
+    expect(res.status).toBe(401);
+    expect((await res.json()).data).toBeUndefined();
+    // nothing usable is left behind for that sign-in
+    expect(await prisma.mobileRefreshToken.count({ where: { userId: f.admin.id, revokedAt: null, rotatedAt: null } })).toBe(0);
+  });
+
   it("A-05 a pending rider can sign in", async () => {
     await prisma.rider.update({ where: { id: f.R3.id }, data: { approvalStatus: "PENDING" } });
     const res = await signIn("rider.r3@test.local", "Correct#123", "rider");

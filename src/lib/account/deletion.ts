@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/auth/password-check";
 import { isPlatformAdminRole } from "@/lib/auth/permissions";
+import { forgetSessionAccountStatus } from "@/lib/auth/session-status";
 
 export class DeletionError extends Error {
   constructor(public code: string, message: string, public status = 409) {
@@ -71,6 +72,8 @@ export async function requestAccountDeletion(userId: string, meta: RequestMeta =
       await tx.itemList.updateMany({ where: { id: { in: ids } }, data: { status: "CANCELLED", cancelledAt: new Date() } });
     }
   });
+  // Website sessions of this account end on their next check (M3).
+  forgetSessionAccountStatus(userId);
 
   await writeAuditLog({
     userId,
