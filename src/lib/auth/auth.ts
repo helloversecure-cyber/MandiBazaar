@@ -110,13 +110,22 @@ export const authOptions: NextAuthOptions = {
         const now = Date.now();
         const last = typeof token.checkedAt === "number" ? token.checkedAt : 0;
         if (now - last >= SESSION_RECHECK_MS) {
-          const status = await accountStatus(token.id as string, now);
-          if (!status.active) return signedOut();
-          if (status.role && status.role !== token.role) {
-            token.role = status.role;
-            delete token.storeApproved; // re-derived below for the new role
+          let status: Awaited<ReturnType<typeof accountStatus>> | null = null;
+          try {
+            status = await accountStatus(token.id as string, now);
+          } catch (e) {
+            // Fail open: a brief database error must not sign everyone out.
+            // checkedAt stays old, so the next request checks again.
+            console.warn("[auth] session re-check skipped:", (e as Error)?.message ?? e);
           }
-          token.checkedAt = status.at;
+          if (status) {
+            if (!status.active) return signedOut();
+            if (status.role && status.role !== token.role) {
+              token.role = status.role;
+              delete token.storeApproved; // re-derived below for the new role
+            }
+            token.checkedAt = status.at;
+          }
         }
       }
 

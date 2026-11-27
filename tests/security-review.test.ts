@@ -77,6 +77,23 @@ describeDb("M3 website sessions follow the account", () => {
     expect(upgraded.role).toBe("STORE_OWNER");
   });
 
+  it("M3 a database error during the re-check keeps the session (fail open)", async () => {
+    const users = prisma.user as unknown as { findUnique: unknown };
+    const original = users.findUnique;
+    users.findUnique = () => Promise.reject(new Error("db down"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const old = Date.now() - SESSION_RECHECK_MS - 1;
+      const out = await jwt({ token: tokenFor(f.customerA.id, "CUSTOMER", old) });
+      expect(out.id).toBe(f.customerA.id);
+      // not marked as checked, so the next request re-checks
+      expect(out.checkedAt).toBe(old);
+    } finally {
+      users.findUnique = original;
+      warn.mockRestore();
+    }
+  });
+
   it("M3 a token without a user is signed out", async () => {
     await expect(jwt({ token: {} })).rejects.toThrow(SESSION_REVOKED);
   });
