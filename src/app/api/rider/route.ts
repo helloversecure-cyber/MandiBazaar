@@ -6,6 +6,7 @@ import { recordStatusEvent } from "@/lib/orders/status-events";
 import { sendDeliveryConfirmationRequest } from "@/lib/orders/delivery-confirm";
 import { finalizeSale, releaseReservedStock } from "@/lib/inventory/stock";
 import { writeAuditLog } from "@/lib/audit";
+import { isUnexpectedError, reportServerError } from "@/lib/monitoring/alerts";
 import { notifyOrderEvent } from "@/lib/notifications/service";
 import {
   apiError,
@@ -312,6 +313,7 @@ export async function GET(req: NextRequest) {
       return apiError("Waiting for MandiBazaar approval before you can deliver", 403);
     }
     console.error("[rider:GET]", e);
+    reportServerError(e, { source: "rider/GET", method: "GET", route: "/api/rider" });
     return apiError(toUserMessage(e), 500);
   }
 }
@@ -832,6 +834,9 @@ export async function PATCH(req: Request) {
       return apiError("Waiting for MandiBazaar approval before you can deliver", 403);
     }
     console.error("[rider:PATCH]", e);
+    if (isUnexpectedError(e)) {
+      reportServerError(e, { source: "delivery/rider PATCH", method: "PATCH", route: "/api/rider" });
+    }
     return apiError(toUserMessage(e), 400);
   }
 }

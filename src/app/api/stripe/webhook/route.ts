@@ -10,6 +10,7 @@ import {
 } from "@/lib/payments/stripe";
 import { notifyOrderEvent } from "@/lib/notifications/service";
 import { prisma } from "@/lib/db";
+import { reportServerError } from "@/lib/monitoring/alerts";
 import { apiError, apiSuccess } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
     return apiSuccess({ received: true });
   } catch (e) {
     console.error("[stripe webhook handler]", e);
+    reportServerError(e, { source: "payments/stripe webhook", method: "POST", route: "/api/stripe/webhook" });
     return apiError("Webhook handler failed", 500);
   }
 }
