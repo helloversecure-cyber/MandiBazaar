@@ -55,6 +55,7 @@ import { PATCH as riderPatch } from "@/app/api/rider/route";
 import { PATCH as ordersPatch } from "@/app/api/orders/route";
 import { GET as orderBidsGet } from "@/app/api/orders/[orderNumber]/rider-bids/route";
 import { POST as acceptRoute } from "@/app/api/orders/[orderNumber]/rider-bids/[bidId]/accept/route";
+import { PATCH as checkoutRequestPatch } from "@/app/api/checkout/delivery-request/route";
 
 const KM = 1 / 111;
 
@@ -613,6 +614,36 @@ describeDb("rider bidding after packing", () => {
       await prisma.order.update({ where: { id: other.order.orderId }, data: { orderStatus: "CANCELLED" } });
       expect(await tickPostPackRequest(other.req.id)).toBe("CLOSED");
       expect((await prisma.deliveryRequest.findUniqueOrThrow({ where: { id: other.req.id } })).status).toBe("CANCELLED");
+    });
+  });
+  describe("security review M1: checkout accept/cancel cannot touch after-packing requests", () => {
+    const checkoutPatch = async (body: Record<string, unknown>) => {
+      as(f.customerA.id, "CUSTOMER");
+      return json(
+        await checkoutRequestPatch(
+          new Request("http://localhost/api/checkout/delivery-request", { method: "PATCH", body: JSON.stringify(body) })
+        )
+      );
+    };
+
+    it("M1 PATCH /api/checkout/delivery-request accept on a POST_PACK bid is NOT_FOUND and changes nothing", async () => {
+      const { order, req } = await readyListOrder();
+      const b1 = (await riderBid(f.R1.userId!, req.id, 150)).body.data.bidId;
+      const res = await checkoutPatch({ action: "accept", bidId: b1 });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("NOT_FOUND");
+      expect((await prisma.deliveryRequest.findUniqueOrThrow({ where: { id: req.id } })).status).toBe("OPEN");
+      expect((await prisma.riderBid.findUniqueOrThrow({ where: { id: b1 } })).status).toBe("PENDING");
+      // the order's own accept flow still works afterwards
+      expect((await customerAccept(order.orderNumber, b1)).status).toBe(201);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.orderId } })).riderId).toBe(f.R1.id);
+    });
+
+    it("M1 PATCH /api/checkout/delivery-request cancel leaves a POST_PACK request open", async () => {
+      const { req } = await readyListOrder();
+      const res = await checkoutPatch({ action: "cancel", requestId: req.id });
+      expect(res.status).toBe(200);
+      expect((await prisma.deliveryRequest.findUniqueOrThrow({ where: { id: req.id } })).status).toBe("OPEN");
     });
   });
 });

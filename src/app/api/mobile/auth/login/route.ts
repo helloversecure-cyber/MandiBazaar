@@ -1,6 +1,6 @@
 import { signInWithPassword } from "@/lib/auth/sign-in";
 import { isPlatformAdminRole } from "@/lib/auth/permissions";
-import { requestMetaFromHeaders } from "@/lib/auth/password-check";
+import { SignInRefusedError, requestMetaFromHeaders } from "@/lib/auth/password-check";
 import { buildMobileSession } from "@/lib/auth/mobile-session-response";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { apiError, apiSuccess, toUserMessage } from "@/lib/utils";
@@ -36,15 +36,22 @@ export async function POST(req: Request) {
         password: typeof body.password === "string" ? body.password : undefined,
         portal,
       },
-      requestMetaFromHeaders(req.headers)
+      requestMetaFromHeaders(req.headers),
+      // The customer portal accepts every role on the website; the app never signs
+      // admins in — refused before the password check (no lockout, lastLoginAt or
+      // ADMIN_SIGN_IN audit side effects, same answer for any password).
+      { refuseRole: isPlatformAdminRole }
     );
   } catch (e) {
+    if (e instanceof SignInRefusedError) {
+      return apiError("Admins sign in on the website.", 403, "PORTAL_NOT_IN_APP");
+    }
     const msg = toUserMessage(e);
     const status = /^Unauthorized .* access$/.test(msg) ? 403 : msg.startsWith("Something went wrong") ? 500 : 401;
     if (status === 500) console.error("[mobile-login]", e);
     return apiError(msg, status, status === 403 ? "WRONG_PORTAL" : status === 401 ? "SIGN_IN_FAILED" : undefined);
   }
-  // The customer portal accepts every role on the website; the app never issues admin tokens.
+  // Defence in depth: never issue admin tokens.
   if (isPlatformAdminRole(user.role)) {
     return apiError("Admins sign in on the website.", 403, "PORTAL_NOT_IN_APP");
   }

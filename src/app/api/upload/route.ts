@@ -18,6 +18,10 @@ import { canUploadToFolder } from "@/lib/uploads/upload-policy";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Generic answers: storage / optimizer details stay in the server log (L5). */
+const UPLOAD_FAILED = "Upload failed. Please try again.";
+const UPLOAD_UNAVAILABLE = "Image uploads are temporarily unavailable. Please try again later.";
+
 /** Incoming file size before runtime optimize (user may pick a large phone photo). */
 const MAX_INPUT_BYTES = 25 * 1024 * 1024;
 const ALLOWED = new Set([
@@ -106,8 +110,12 @@ export async function POST(req: NextRequest) {
     try {
       optimized = await optimizeImageBuffer(bytes, kind);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Image optimization failed";
-      return apiError(message, 400);
+      // Our own "couldn't compress" messages are meant for the user; anything
+      // else (decoder / sharp internals) is logged and replaced (L5).
+      const message = e instanceof Error ? e.message : "";
+      if (/^Could not compress /.test(message)) return apiError(message, 400);
+      console.error("[upload:optimize]", e);
+      return apiError("We couldn't read that image. Please try another JPG or PNG photo.", 400);
     }
 
     const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${optimized.ext}`;
@@ -116,10 +124,8 @@ export async function POST(req: NextRequest) {
     // Production / Vercel: Neon Object Storage is required (ephemeral disk).
     if (process.env.VERCEL || process.env.NODE_ENV === "production") {
       if (!neonStorageConfigured()) {
-        return apiError(
-          "Image uploads require Neon Object Storage. In Neon Console create a public_read bucket + storage credential, then set NEON_STORAGE_ACCESS_KEY, NEON_STORAGE_SECRET_KEY, NEON_STORAGE_ENDPOINT, NEON_STORAGE_REGION, and NEON_STORAGE_BUCKET on Vercel.",
-          503
-        );
+        console.error("[upload] Neon Object Storage is not configured (NEON_STORAGE_* env vars)");
+        return apiError(UPLOAD_UNAVAILABLE, 503);
       }
       try {
         const uploaded = await uploadToNeonStorage({
@@ -137,9 +143,8 @@ export async function POST(req: NextRequest) {
           height: optimized.height,
         });
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Upload failed";
-        console.error("[upload:neon]", message, e);
-        return apiError(message, 400);
+        console.error("[upload:neon]", e);
+        return apiError(UPLOAD_FAILED, 400);
       }
     }
 
@@ -161,9 +166,8 @@ export async function POST(req: NextRequest) {
           height: optimized.height,
         });
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Upload failed";
-        console.error("[upload:neon]", message, e);
-        return apiError(message, 400);
+        console.error("[upload:neon]", e);
+        return apiError(UPLOAD_FAILED, 400);
       }
     }
 

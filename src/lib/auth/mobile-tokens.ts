@@ -14,6 +14,7 @@ import { decode, encode } from "next-auth/jwt";
 import type { RoleName } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { storeOwnerApproved } from "@/lib/auth/sign-in";
+import { isPlatformAdminRole } from "@/lib/auth/permissions";
 
 export const ACCESS_TOKEN_TTL_SECS = 60 * 60;
 export const REFRESH_TOKEN_TTL_DAYS = 30;
@@ -73,6 +74,8 @@ export async function sessionFromBearer(authorization: string | null | undefined
     select: { id: true, isActive: true, fullName: true, email: true, phone: true, role: { select: { name: true } } },
   });
   if (!user || !user.isActive) return null;
+  // The app never carries admin sessions (the admin panel is website-only).
+  if (isPlatformAdminRole(user.role.name)) return null;
 
   return {
     expires: new Date(exp).toISOString(),

@@ -7,6 +7,7 @@
  * commission or any other store's private data.
  */
 import { prisma } from "@/lib/db";
+import { listLineTotal } from "@/lib/lists/line-total";
 import { computeDeliveryFee, getDeliverySettings } from "@/lib/orders/delivery-fee";
 import { ratingOf, storeRatings } from "@/lib/stores/reviews";
 
@@ -155,7 +156,7 @@ export async function offersForList(listId: string): Promise<CustomerOffer[]> {
         unit: l.unit,
         available,
         unitPrice,
-        lineTotal: unitPrice == null ? null : round2(unitPrice * quantity),
+        lineTotal: unitPrice == null ? null : listLineTotal(unitPrice, quantity),
       };
     });
     const itemsTotal = Number(b.itemsTotal);

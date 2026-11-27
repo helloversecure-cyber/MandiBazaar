@@ -11,6 +11,7 @@ import {
 import { requestMetaFromHeaders, type RequestMeta } from "@/lib/auth/password-check";
 import { signInWithPassword, storeOwnerApproved } from "@/lib/auth/sign-in";
 import { sessionFromBearer } from "@/lib/auth/mobile-tokens";
+import { SESSION_RECHECK_MS, accountStatus, forgetSessionAccountStatus } from "@/lib/auth/session-status";
 
 type ReqLike = { headers?: Record<string, unknown> | Headers } | undefined;
 
@@ -19,6 +20,16 @@ function requestMeta(req: ReqLike): RequestMeta {
   return requestMetaFromHeaders(req?.headers);
 }
 
+/**
+ * Thrown from the jwt callback when the account behind a session is gone or
+ * deactivated. NextAuth then answers "no session" and clears the cookie where
+ * it can (the /api/auth/session endpoint), so the website signs the user out.
+ */
+export const SESSION_REVOKED = "SESSION_REVOKED";
+const signedOut = (): never => {
+  throw new Error(SESSION_REVOKED);
+};
+
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
   pages: {
@@ -26,6 +37,14 @@ export const authOptions: NextAuthOptions = {
     error: "/login",
   },
   useSecureCookies: process.env.NODE_ENV === "production",
+  logger: {
+    // A revoked session is expected, not an error worth a stack trace per request.
+    error(code, metadata) {
+      if (metadata instanceof Error && metadata.message === SESSION_REVOKED) return;
+      const m = metadata as { message?: string } | undefined;
+      console.error(`[next-auth][error][${code}]`, m?.message ?? "", metadata);
+    },
+  },
   cookies: {
     sessionToken: {
       name:
@@ -83,6 +102,31 @@ export const authOptions: NextAuthOptions = {
         token.mustChangePassword = Boolean(
           (user as { mustChangePassword?: boolean }).mustChangePassword
         );
+        token.checkedAt = Date.now();
+      } else {
+        if (!token.id) return signedOut();
+        // M3: re-check the account at most every SESSION_RECHECK_MS. A deactivated
+        // or deleted account's session is revoked (signed out everywhere).
+        const now = Date.now();
+        const last = typeof token.checkedAt === "number" ? token.checkedAt : 0;
+        if (now - last >= SESSION_RECHECK_MS) {
+          let status: Awaited<ReturnType<typeof accountStatus>> | null = null;
+          try {
+            status = await accountStatus(token.id as string, now);
+          } catch (e) {
+            // Fail open: a brief database error must not sign everyone out.
+            // checkedAt stays old, so the next request checks again.
+            console.warn("[auth] session re-check skipped:", (e as Error)?.message ?? e);
+          }
+          if (status) {
+            if (!status.active) return signedOut();
+            if (status.role && status.role !== token.role) {
+              token.role = status.role;
+              delete token.storeApproved; // re-derived below for the new role
+            }
+            token.checkedAt = status.at;
+          }
+        }
       }
 
       // Refresh role from DB after role upgrades (e.g. CUSTOMER → STORE_OWNER)
@@ -91,11 +135,12 @@ export const authOptions: NextAuthOptions = {
           where: { id: token.id as string },
           include: { role: true },
         });
-        if (dbUser) {
-          token.role = dbUser.role.name;
-          token.phone = dbUser.phone;
-          token.mustChangePassword = dbUser.mustChangePassword;
-        }
+        if (!dbUser || !dbUser.isActive) return signedOut();
+        forgetSessionAccountStatus(dbUser.id);
+        token.role = dbUser.role.name;
+        token.phone = dbUser.phone;
+        token.mustChangePassword = dbUser.mustChangePassword;
+        token.checkedAt = Date.now();
       }
 
       // storeApproved gates a pending store owner out of the customer site and
@@ -144,7 +189,8 @@ export async function getSession() {
   } catch {
     // Called outside a request (scripts, tests): no header to read.
   }
-  return session;
+  // A session without a user is the same as being signed out.
+  return null;
 }
 
 export async function requireAuth() {

@@ -23,6 +23,7 @@ import { writeAuditLog } from "@/lib/audit";
 import type { RequestMeta } from "@/lib/auth/password-check";
 import { recordOrderConfirmedLedger } from "@/lib/finance/ledger";
 import { reserveStock } from "@/lib/inventory/stock";
+import { listLineTotal, sumLineTotals } from "@/lib/lists/line-total";
 import { assertListBiddingAllowed, ListError } from "@/lib/lists/service";
 import { notifyOrderEvent, sendNotification } from "@/lib/notifications/service";
 import { storeRecipientIds } from "@/lib/notifications/order-events";
@@ -239,7 +240,7 @@ export async function acceptOffer(
         const unitPrice = Number(answers.get(l.id)!.unitPrice);
         const qty = Number(l.quantity);
         const whole = Number.isInteger(qty);
-        const lineTotal = round2(unitPrice * qty);
+        const lineTotal = listLineTotal(unitPrice, qty);
         const p = l.productId ? productBy.get(l.productId) : undefined;
         const linked = !!p && whole && p.stockQuantity - p.reservedStock >= qty;
         return {
@@ -254,7 +255,7 @@ export async function acceptOffer(
         };
       });
 
-      const subtotal = round2(rows.reduce((s, r) => s + r.lineTotal, 0));
+      const subtotal = sumLineTotals(rows.map((r) => r.lineTotal));
       const discount = Math.min(round2(Number(bid.discount)), subtotal);
       const productTotal = round2(subtotal - discount);
       if (input.expectedTotal != null && Math.abs(input.expectedTotal - productTotal) > 0.009) {

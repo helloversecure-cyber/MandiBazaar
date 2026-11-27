@@ -68,6 +68,27 @@ export function neonPublicUrl(key: string) {
   return `${getEndpoint()}/${getBucket()}/${key.replace(/^\//, "")}`;
 }
 
+/** Where /api/upload puts files: `mandibazaar/<folder>/<file>` (see the upload route). */
+const UPLOAD_PREFIX = "mandibazaar/";
+const UPLOAD_TAIL = /^[a-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]{2,5}$/i;
+const LOCAL_UPLOAD = /^\/uploads\/[a-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]{2,5}$/i;
+
+/**
+ * True only for a URL our own /api/upload could have returned: the public URL of
+ * an object in our Neon bucket under `mandibazaar/`, or (local dev) a
+ * `/uploads/<folder>/<file>` path. Anything else — other hosts, other buckets,
+ * query strings, `..` — is refused, so a receipt can't point at an arbitrary site.
+ */
+export function isOwnUploadUrl(url: string | null | undefined): boolean {
+  const u = (url || "").trim();
+  if (!u || u.length > 1000) return false;
+  if (LOCAL_UPLOAD.test(u)) return true;
+  if (!neonStorageConfigured()) return false;
+  const base = neonPublicUrl(UPLOAD_PREFIX);
+  if (!u.startsWith(base)) return false;
+  return UPLOAD_TAIL.test(u.slice(base.length));
+}
+
 export async function uploadToNeonStorage(params: {
   bytes: Buffer;
   key: string;
