@@ -37,7 +37,7 @@ export function DashboardShell({
   const pathname = usePathname();
 
   return (
-    <div className="flex min-h-screen bg-app text-ink">
+    <div className="portal-tap-targets flex min-h-screen bg-app text-ink">
       {/* ── Desktop sidebar ─────────────────────────────────────────────── */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card lg:flex">
         <div className="px-5 py-5">

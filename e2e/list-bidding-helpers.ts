@@ -87,3 +87,15 @@ export async function addressIdA(request: APIRequestContext) {
   const d = (await (await request.get("/api/addresses", { headers: A })).json()).data;
   return (Array.isArray(d) ? d : d.items)[0].id as string;
 }
+
+/**
+ * Resets a customer's lists-per-hour budget (MAX_LISTS_PER_HOUR) via e2e/age-lists.ts.
+ * Every spec that sends lists as Customer A calls it first, so the full suite at all
+ * 6 widths never hits 429 on one server.
+ */
+export function ageCustomerLists(email = "customer.a@test.local") {
+  execFileSync("npx", ["tsx", "e2e/age-lists.ts", email], {
+    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL },
+    stdio: "inherit",
+  });
+}

@@ -40,13 +40,14 @@ async function main() {
   const state = {
     cookies: [
       {
-        name: "next-auth.session-token",
+        // global-setup passes the cookie name for the server mode (SESSION_COOKIE in playwright.config.ts).
+        name: process.env.E2E_SESSION_COOKIE || "next-auth.session-token",
         value: token,
         domain: hostname,
         path: "/",
         expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
         httpOnly: true,
-        secure: false,
+        secure: (process.env.E2E_SESSION_COOKIE || "").startsWith("__Secure-"),
         sameSite: "Lax" as const,
       },
     ],

@@ -8,10 +8,13 @@
  * send-list-responsive.spec.ts.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { BASE_URL } from "../playwright.config";
+import { BASE_URL, sessionCookieParam } from "../playwright.config";
 import { CUSTOMER_STATE } from "./global-setup";
-import { markReady, riderBid, riderRequestId, seedRiders, sessionCookie, storeBid } from "./list-bidding-helpers";
+import { ageCustomerLists, markReady, riderBid, riderRequestId, seedRiders, sessionCookie, storeBid } from "./list-bidding-helpers";
 import { ensureCartItems } from "./responsive-audit";
+
+// Fresh lists-per-hour budget for Customer A (W18: the full suite at 6 widths shares one server).
+test.beforeAll(() => ageCustomerLists());
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -183,7 +186,7 @@ test("feature off: a customer who isn't a beta tester sees no entry points", asy
   test.skip(info.project.name !== "w1280", "one width is enough");
   const ctx = await browser.newContext();
   await ctx.addCookies([
-    { name: "next-auth.session-token", value: sessionCookie("customer.b@test.local"), url: BASE_URL },
+    sessionCookieParam(sessionCookie("customer.b@test.local")),
   ]);
   const page = await ctx.newPage();
   const config = page.waitForResponse((r) => r.url().includes("/api/app/config"), { timeout: 30_000 });

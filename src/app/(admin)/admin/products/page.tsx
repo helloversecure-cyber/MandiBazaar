@@ -416,7 +416,7 @@ export default function AdminProductsPage() {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search name, SKU or store…"
             aria-label="Search products"
-            className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm sm:w-64 sm:flex-none"
+            className="min-w-0 basis-full rounded-full border px-4 py-2 text-sm sm:w-64 sm:flex-none sm:basis-auto"
           />
           <select
             value={storeFilter}

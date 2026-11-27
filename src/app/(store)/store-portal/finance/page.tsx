@@ -119,7 +119,7 @@ export default function StoreFinancePage() {
       <section>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-muted">Order-wise breakdown</h2>
         <div className="overflow-x-auto rounded-2xl border border-line bg-card">
-          <table className="w-full text-left text-sm">
+          <table className="table-cards w-full text-left text-sm">
             <thead className="bg-brand-50 dark:bg-brand-500/10 text-xs uppercase tracking-wide text-ink-subtle">
               <tr>
                 <th className="px-4 py-3">Order</th>
@@ -136,18 +136,18 @@ export default function StoreFinancePage() {
               ) : (
                 data.breakdown.map((o) => (
                   <tr key={`${o.storeId}:${o.orderId}`}>
-                    <td className="px-4 py-3">
+                    <td data-label="Order" className="px-4 py-3">
                       <div className="font-semibold text-ink">{o.orderNumber}</div>
                       {new Set(data.breakdown.map((b) => b.storeId)).size > 1 && o.storeName && (
                         <div className="text-xs font-medium text-brand-600">{o.storeName}</div>
                       )}
                       <div className="text-xs text-ink-subtle">{new Date(o.date).toLocaleDateString("en-PK")}</div>
                     </td>
-                    <td className="px-4 py-3"><StatusPill status={o.orderStatus} /></td>
-                    <td className="px-4 py-3 text-right">{rs(o.gross)}</td>
-                    <td className="px-4 py-3 text-right text-amber-700">− {rs(o.commission)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-ink">{rs(o.net)}</td>
-                    <td className="px-4 py-3">
+                    <td data-label="Status" className="px-4 py-3"><StatusPill status={o.orderStatus} /></td>
+                    <td data-label="Gross" className="px-4 py-3 text-right">{rs(o.gross)}</td>
+                    <td data-label="Commission" className="px-4 py-3 text-right text-amber-700">− {rs(o.commission)}</td>
+                    <td data-label="Net" className="px-4 py-3 text-right font-semibold text-ink">{rs(o.net)}</td>
+                    <td data-label="Settlement" className="px-4 py-3">
                       {o.settled ? (
                         <span className="text-xs font-medium text-emerald-700">Settled{o.payoutReference ? ` · ${o.payoutReference}` : ""}</span>
                       ) : o.heldForCod ? (
@@ -168,7 +168,7 @@ export default function StoreFinancePage() {
       <section>
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-muted">Payout history</h2>
         <div className="overflow-x-auto rounded-2xl border border-line bg-card">
-          <table className="w-full text-left text-sm">
+          <table className="table-cards w-full text-left text-sm">
             <thead className="bg-brand-50 dark:bg-brand-500/10 text-xs uppercase tracking-wide text-ink-subtle">
               <tr>
                 <th className="px-4 py-3">Period</th>
@@ -183,13 +183,13 @@ export default function StoreFinancePage() {
               ) : (
                 data.payouts.map((p) => (
                   <tr key={p.id}>
-                    <td className="px-4 py-3 text-xs text-ink-muted">
+                    <td data-label="Period" className="px-4 py-3 text-xs text-ink-muted">
                       {new Date(p.periodStart).toLocaleDateString("en-PK")} – {new Date(p.periodEnd).toLocaleDateString("en-PK")}
                       <span className="ml-1 text-ink-subtle">({p.orderCount} orders)</span>
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold">{rs(p.netAmount)}</td>
-                    <td className="px-4 py-3"><StatusPill status={p.status} /></td>
-                    <td className="px-4 py-3 text-xs text-ink-subtle">{p.payoutReference || "—"}</td>
+                    <td data-label="Net paid" className="px-4 py-3 text-right font-semibold">{rs(p.netAmount)}</td>
+                    <td data-label="Status" className="px-4 py-3"><StatusPill status={p.status} /></td>
+                    <td data-label="Reference" className="px-4 py-3 text-xs text-ink-subtle">{p.payoutReference || "—"}</td>
                   </tr>
                 ))
               )}

@@ -2,6 +2,10 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { E2E_SECRET } from "../playwright.config";
+import { ageCustomerLists } from "./list-bidding-helpers";
+
+// Fresh lists-per-hour budget for Customer A (W18: the full suite at 6 widths shares one server).
+test.beforeAll(() => ageCustomerLists());
 
 test.beforeEach(({}, info) => {
   test.skip(info.project.name !== "w390", "API test: one width is enough");

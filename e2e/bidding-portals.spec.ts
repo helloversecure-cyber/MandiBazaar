@@ -16,8 +16,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { expect as baseExpect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
-import { BASE_URL } from "../playwright.config";
-import { addressIdA, bearer, markReady, riderRequestId, seedRiders, sessionCookie, storeBid } from "./list-bidding-helpers";
+import { BASE_URL, SESSION_COOKIE, sessionCookieParam } from "../playwright.config";
+import { addressIdA, ageCustomerLists, bearer, markReady, riderRequestId, seedRiders, sessionCookie, storeBid } from "./list-bidding-helpers";
 import { findHorizontalOverflow, findSmallTapTargets, openPage } from "./responsive-audit";
 
 
@@ -29,7 +29,7 @@ const SHOTS = process.env.E2E_SCREENSHOTS || "test-results/screens";
 
 async function signedIn(browser: Browser, email: string, info: { project: { use: { viewport?: { width: number; height: number } | null } } }) {
   const ctx = await browser.newContext({ viewport: info.project.use.viewport ?? undefined });
-  await ctx.addCookies([{ name: "next-auth.session-token", value: sessionCookie(email), url: BASE_URL }]);
+  await ctx.addCookies([sessionCookieParam(sessionCookie(email))]);
   return { ctx, page: await ctx.newPage() };
 }
 
@@ -37,13 +37,6 @@ async function api(playwright: { request: { newContext: (o: object) => Promise<A
   return playwright.request.newContext({ baseURL: BASE_URL, storageState: { cookies: [], origins: [] } });
 }
 
-/** Reset Customer A's lists-per-hour budget (every spec sends lists as A on the same server). */
-function ageCustomerLists() {
-  execFileSync("npx", ["tsx", "e2e/age-lists.ts", A], {
-    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL },
-    stdio: "inherit",
-  });
-}
 
 async function createList(request: APIRequestContext, note: string, lines: { name: string; quantity: number; unit: string }[]) {
   const send = async () =>
@@ -288,7 +281,7 @@ test.describe("admin", () => {
     const admin = await signedIn(browser, "admin@test.local", info);
     const page = admin.page;
     const flagFor = async (email: string) =>
-      (await (await request.get("/api/app/config", { headers: { cookie: `next-auth.session-token=${sessionCookie(email)}` } })).json()).data
+      (await (await request.get("/api/app/config", { headers: { cookie: `${SESSION_COOKIE}=${sessionCookie(email)}` } })).json()).data
         .features.listBidding as boolean;
 
     await page.goto("/admin/bidding/settings");

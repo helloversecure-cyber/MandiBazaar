@@ -4,7 +4,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { BASE_URL, E2E_SECRET } from "../playwright.config";
+import { E2E_SECRET, sessionCookieParam } from "../playwright.config";
 
 function cookieFor(email: string): string {
   return execFileSync("npx", ["tsx", "e2e/mint-token.ts", email, "--cookie"], {
@@ -18,7 +18,7 @@ test("A-11 signed-in customer sees their account pages, signed-out is sent to lo
   await expect(page).toHaveURL(/\/login/);
 
   await context.addCookies([
-    { name: "next-auth.session-token", value: cookieFor("customer.a@test.local"), url: BASE_URL },
+    sessionCookieParam(cookieFor("customer.a@test.local")),
   ]);
   const res = await page.goto("/account/orders", { waitUntil: "networkidle" });
   expect(res?.status()).toBeLessThan(400);
