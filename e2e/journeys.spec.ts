@@ -18,7 +18,7 @@
  *      a signed-in user with the wrong role → the access-denied page.
  */
 import { expect as baseExpect, test, type Page } from "@playwright/test";
-import { BASE_URL } from "../playwright.config";
+import { sessionCookieParam } from "../playwright.config";
 import { sessionCookie } from "./list-bidding-helpers";
 
 // A cold `next dev` compiles each page on first visit; give UI checks room.
@@ -31,7 +31,7 @@ const visible = (page: Page, role: "button" | "link", name: RegExp) =>
 test("normal cart checkout with cash on delivery, then the store sees the order", async ({ page, context, browser }, info) => {
   test.setTimeout(180_000);
   const email = `journey.${info.project.name}@test.local`;
-  await context.addCookies([{ name: "next-auth.session-token", value: sessionCookie(email), url: BASE_URL }]);
+  await context.addCookies([sessionCookieParam(sessionCookie(email))]);
 
   // Product page → cart (Milk 1L keeps the order under the full-COD limit).
   await page.goto("/products/milk-1l");
@@ -75,7 +75,7 @@ test("normal cart checkout with cash on delivery, then the store sees the order"
 
   // The store sees it in its portal.
   const store = await browser.newContext({ viewport: page.viewportSize() });
-  await store.addCookies([{ name: "next-auth.session-token", value: sessionCookie("owner.s1@test.local"), url: BASE_URL }]);
+  await store.addCookies([sessionCookieParam(sessionCookie("owner.s1@test.local"))]);
   const sp = await store.newPage();
   await sp.goto(`/store-portal/orders?tab=all&q=${orderNumber}`);
   await expect(sp.getByText(orderNumber).first()).toBeVisible({ timeout: 45_000 });
@@ -102,7 +102,7 @@ test.describe("K-02 portal guards in the browser", () => {
 
     test(`customer: ${path} → access denied`, async ({ page, context }) => {
       await context.addCookies([
-        { name: "next-auth.session-token", value: sessionCookie("customer.b@test.local"), url: BASE_URL },
+        sessionCookieParam(sessionCookie("customer.b@test.local")),
       ]);
       await page.goto(path);
       await expect(page).toHaveURL(new RegExp(`/access-denied\\?area=${area}`), { timeout: 45_000 });
@@ -110,7 +110,7 @@ test.describe("K-02 portal guards in the browser", () => {
   }
 
   test("a rider can't open the store or admin portal", async ({ page, context }) => {
-    await context.addCookies([{ name: "next-auth.session-token", value: sessionCookie("rider.r2@test.local"), url: BASE_URL }]);
+    await context.addCookies([sessionCookieParam(sessionCookie("rider.r2@test.local"))]);
     for (const [path, area] of [
       ["/store-portal", "store"],
       ["/admin", "admin"],

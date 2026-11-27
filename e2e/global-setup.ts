@@ -1,6 +1,6 @@
 /** Resets the local test database, seeds the standard fixtures + a few products, and signs in Customer A. */
 import { execSync } from "node:child_process";
-import { BASE_URL } from "../playwright.config";
+import { BASE_URL, SESSION_COOKIE } from "../playwright.config";
 
 /** Storage state with a NextAuth session for customer.a@test.local (see e2e/mint-session.ts). */
 export const CUSTOMER_STATE = "e2e/.auth/customer.json";
@@ -13,7 +13,7 @@ export default async function globalSetup() {
     stdio: "inherit",
   });
   execSync(`npx tsx e2e/mint-session.ts ${CUSTOMER_STATE}`, {
-    env: { ...process.env, DATABASE_URL: url, TEST_DATABASE_URL: url, E2E_BASE_URL: BASE_URL },
+    env: { ...process.env, DATABASE_URL: url, TEST_DATABASE_URL: url, E2E_BASE_URL: BASE_URL, E2E_SESSION_COOKIE: SESSION_COOKIE },
     stdio: "inherit",
   });
 }

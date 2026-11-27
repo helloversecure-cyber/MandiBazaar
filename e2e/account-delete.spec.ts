@@ -1,7 +1,7 @@
 /** W11 in the browser: account deletion (M1-12, P-04) at every width. */
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
-import { BASE_URL, E2E_SECRET } from "../playwright.config";
+import { E2E_SECRET, sessionCookieParam } from "../playwright.config";
 
 const cookieFor = (email: string) =>
   execFileSync("npx", ["tsx", "e2e/mint-token.ts", email, "--cookie"], {
@@ -24,7 +24,7 @@ test("P-04 the public delete-account page explains the steps", async ({ page }) 
 
 test("M1-12 a customer deletes their account from the website", async ({ page, context }, info) => {
   const email = `delete.${info.project.name}@test.local`;
-  await context.addCookies([{ name: "next-auth.session-token", value: cookieFor(email), url: BASE_URL }]);
+  await context.addCookies([sessionCookieParam(cookieFor(email))]);
 
   await page.goto("/account/security", { waitUntil: "networkidle" });
   await page.getByRole("link", { name: "Delete account" }).last().click();

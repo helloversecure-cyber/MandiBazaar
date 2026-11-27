@@ -11,7 +11,9 @@ import { prisma } from "../tests/helpers/db";
 async function main() {
   const email = process.argv[2] || "customer.a@test.local";
   const u = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } });
-  await prisma.$executeRaw`UPDATE "ItemList" SET "createdAt" = "createdAt" - interval '2 hours' WHERE "customerId" = ${u.id} AND "createdAt" > now() - interval '1 hour'`;
+  // createdAt is a UTC timestamp without time zone; compare it to UTC "now" so this also
+  // works when the database's TimeZone is not UTC (a local Postgres in Asia/Karachi).
+  await prisma.$executeRaw`UPDATE "ItemList" SET "createdAt" = "createdAt" - interval '2 hours' WHERE "customerId" = ${u.id} AND "createdAt" > (now() AT TIME ZONE 'UTC') - interval '1 hour'`;
 }
 
 main()

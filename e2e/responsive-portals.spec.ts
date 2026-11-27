@@ -57,7 +57,8 @@ for (const portal of PORTALS) {
       await bar.getByRole("button", { name: "More" }).click();
       const sheet = page.getByRole("dialog", { name: "Menu" });
       await expect(sheet).toBeVisible();
-      await page.waitForTimeout(350); // pop-in animation
+      // Measure after the pop-in animation (a fixed wait is too short on a busy dev server).
+      await sheet.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
       await expectFits(page, "More sheet");
       // Every nav item is reachable from the sheet, and the sheet closes.
       const last = sheet.getByRole("link").last();

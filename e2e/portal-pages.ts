@@ -1,6 +1,6 @@
 /** W17: the store, rider and admin portal pages and who signs in to see them (e2e/seed.ts data). */
 import type { BrowserContext, Page } from "@playwright/test";
-import { BASE_URL } from "../playwright.config";
+import { sessionCookieParam } from "../playwright.config";
 import { sessionCookie } from "./list-bidding-helpers";
 
 export const STORE_PAGES = [
@@ -62,7 +62,7 @@ export const PORTALS = [
 const cookies = new Map<string, string>();
 export async function signIn(context: BrowserContext, email: string) {
   if (!cookies.has(email)) cookies.set(email, sessionCookie(email));
-  await context.addCookies([{ name: "next-auth.session-token", value: cookies.get(email)!, url: BASE_URL }]);
+  await context.addCookies([sessionCookieParam(cookies.get(email)!)]);
 }
 
 /** The bottom bar (fixed, < 1024 px) must not hide the last control or line of the page. */
