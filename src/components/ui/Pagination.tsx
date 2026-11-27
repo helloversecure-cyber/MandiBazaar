@@ -49,7 +49,7 @@ export function Pagination({
   const nums = pageWindow(current, pages);
 
   const item = (p: number, label: React.ReactNode, opts: { active?: boolean; disabled?: boolean; aria?: string } = {}) => {
-    const cls = `inline-flex min-w-9 items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition ${
+    const cls = `inline-flex min-w-9 max-md:min-h-11 max-md:min-w-11 items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition ${
       opts.active
         ? "bg-brand-600 text-white"
         : opts.disabled

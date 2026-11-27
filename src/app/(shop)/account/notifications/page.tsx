@@ -94,7 +94,8 @@ export default function NotificationsPage() {
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <div>
+              {/* min-w-0 + anywhere: a body with a long link (confirm-delivery URL) wraps on phones. */}
+              <div className="min-w-0 [overflow-wrap:anywhere]">
                 <p className="font-semibold text-ink">{n.title}</p>
                 <p className="mt-1 text-sm text-ink-muted">{n.body}</p>
                 <p className="mt-2 text-xs text-ink-subtle">
