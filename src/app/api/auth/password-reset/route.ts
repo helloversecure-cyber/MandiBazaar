@@ -14,7 +14,7 @@ const SUPER_ADMIN_RESET_MSG =
  */
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  const rl = rateLimit(`pwd-reset:${ip}`, 5, 60_000);
+  const rl = await rateLimit(`pwd-reset:${ip}`, 5, 60_000);
   if (!rl.ok) return apiError("Too many requests. Try again in a minute.", 429);
 
   const neutral = apiSuccess({

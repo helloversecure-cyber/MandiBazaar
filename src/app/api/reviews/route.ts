@@ -91,7 +91,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session?.user?.id) return apiError("Unauthorized", 401);
-  const rl = rateLimit(`review:${session.user.id}`, 10, 60_000);
+  const rl = await rateLimit(`review:${session.user.id}`, 10, 60_000);
   if (!rl.ok) return apiError("Too many reviews — please wait a minute.", 429);
 
   const parsed = reviewSchema.safeParse(await req.json().catch(() => ({})));

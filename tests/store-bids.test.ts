@@ -204,7 +204,15 @@ describeDb("store bids", () => {
         expect((await listForStore(owner(f.S1), listId)).distanceKm).toBe(shown);
         const inbox = await listsForStore(owner(f.S1), { skip: 0, take: 10 });
         expect(inbox.items[0].distanceKm).toBe(shown);
-        expect(JSON.stringify(inbox)).not.toContain(String(exact));
+        // No number in the reply carries the exact distance. (Checking the
+        // whole JSON text failed at random: a timestamp like "…:52.26…Z"
+        // contains "2.26".)
+        const numbers: number[] = [];
+        JSON.stringify(inbox, (_k, v) => {
+          if (typeof v === "number") numbers.push(v);
+          return v;
+        });
+        expect(numbers).not.toContain(exact);
       }
       // the stored (internal) value keeps full precision
       const b = await prisma.listBroadcast.findUniqueOrThrow({ where: { listId_storeId: { listId, storeId: f.S1.id } } });

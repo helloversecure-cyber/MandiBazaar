@@ -12,7 +12,7 @@ export async function POST(req: Request): Promise<Response> {
   const session = await getSession();
   if (!session?.user?.id) return apiError("Please sign in", 401);
 
-  const rl = rateLimit(`payment-proof:${session.user.id}`, 15, 60_000);
+  const rl = await rateLimit(`payment-proof:${session.user.id}`, 15, 60_000);
   if (!rl.ok) return apiError("Too many uploads. Please wait a moment.", 429);
 
   try {

@@ -22,7 +22,7 @@ const quoteSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const rl = rateLimit(`cart-quote:${clientIp(req)}`, 120, 60_000);
+  const rl = await rateLimit(`cart-quote:${clientIp(req)}`, 120, 60_000);
   if (!rl.ok) return apiError("Too many requests. Please wait a moment.", 429);
   try {
     const body = await req.json().catch(() => null);

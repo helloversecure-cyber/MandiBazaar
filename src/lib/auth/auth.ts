@@ -9,6 +9,7 @@ import {
   isStorePortalRole,
 } from "@/lib/auth/permissions";
 import { requestMetaFromHeaders, type RequestMeta } from "@/lib/auth/password-check";
+import { rateLimit } from "@/lib/rate-limit";
 import { signInWithPassword, storeOwnerApproved } from "@/lib/auth/sign-in";
 import { sessionFromBearer } from "@/lib/auth/mobile-tokens";
 import { SESSION_RECHECK_MS, accountStatus, forgetSessionAccountStatus } from "@/lib/auth/session-status";
@@ -69,7 +70,14 @@ export const authOptions: NextAuthOptions = {
         portal: { label: "Portal", type: "text" },
       },
       async authorize(credentials, req) {
-        return signInWithPassword(credentials ?? {}, requestMeta(req));
+        const meta = requestMeta(req);
+        // Per-connection limit (the per-account lockout is in password-check):
+        // stops one source trying a password against many accounts. Same
+        // limit as the app's /api/mobile/auth/login.
+        if (meta.ipAddress && !(await rateLimit(`web-login:${meta.ipAddress}`, 20, 60_000)).ok) {
+          throw new Error("Too many sign-in attempts. Please wait a minute and try again.");
+        }
+        return signInWithPassword(credentials ?? {}, meta);
       },
     }),
   ],

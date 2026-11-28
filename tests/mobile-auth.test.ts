@@ -265,6 +265,27 @@ describeDb("mobile auth", () => {
     expect(await adminSignIns()).toBe(before + 1);
   });
 
+  it("website sign-in: 20 tries a minute per connection, then refused", async () => {
+    const { authOptions } = await import("@/lib/auth/auth");
+    const provider = authOptions.providers[0] as unknown as {
+      options: { authorize: (c: Record<string, string>, req: unknown) => Promise<unknown> };
+    };
+    const authorize = provider.options.authorize;
+    const req = { headers: { "x-forwarded-for": "10.9.9.9" } };
+    const results: string[] = [];
+    for (let i = 0; i < 21; i++) {
+      // Different (unknown) accounts: the per-account lockout never kicks in.
+      results.push(
+        await authorize({ identifier: `nobody${i}@test.local`, password: "x", portal: "customer" }, req).then(
+          () => "ok",
+          (e: Error) => e.message
+        )
+      );
+    }
+    expect(results.slice(0, 20).every((m) => m === "Invalid credentials")).toBe(true);
+    expect(results[20]).toBe("Too many sign-in attempts. Please wait a minute and try again.");
+  });
+
   it("an unapproved store owner signs in with storeApproved=false", async () => {
     await prisma.store.update({ where: { id: f.S2.id }, data: { status: "PENDING" } });
     const { data } = await (await signIn("owner.s2@test.local", "Correct#123", "store")).json();

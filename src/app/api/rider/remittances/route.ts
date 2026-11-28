@@ -60,7 +60,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const { rider } = await requireRider({ allowPending: true });
-    const rl = rateLimit(`remit-submit:${rider.id}`, 20, 60_000);
+    const rl = await rateLimit(`remit-submit:${rider.id}`, 20, 60_000);
     if (!rl.ok) return apiError("Please wait a moment before trying again.", 429);
 
     const body = (await req.json().catch(() => ({}))) as {

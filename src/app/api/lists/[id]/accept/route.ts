@@ -18,7 +18,7 @@ type Ctx = { params: { id: string } };
 export async function POST(req: Request, { params }: Ctx) {
   try {
     const session = await requireAuth();
-    if (!rateLimit(`list-accept:${session.user.id}`, 20, 60_000).ok) return apiError("Too many requests", 429);
+    if (!(await rateLimit(`list-accept:${session.user.id}`, 20, 60_000)).ok) return apiError("Too many requests", 429);
     const parsed = acceptOfferSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       const { message, field } = firstIssue(parsed.error);

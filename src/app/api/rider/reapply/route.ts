@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       return apiError("Only a rejected application can be sent again.", 403, "NOT_REJECTED");
     }
 
-    const rl = rateLimit(`rider-reapply:${rider.id}`, 10, 60 * 60_000);
+    const rl = await rateLimit(`rider-reapply:${rider.id}`, 10, 60 * 60_000);
     if (!rl.ok) return apiError("Too many requests. Please try again later.", 429);
 
     const body = await req.json().catch(() => null);

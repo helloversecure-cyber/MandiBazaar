@@ -13,7 +13,7 @@ type Ctx = { params: { id: string } };
 export async function PUT(req: Request, { params }: Ctx) {
   try {
     const session = await requireStorePortal();
-    if (!rateLimit(`store-bid:${session.user.id}`, 60, 60_000).ok) return apiError("Too many requests", 429);
+    if (!(await rateLimit(`store-bid:${session.user.id}`, 60, 60_000)).ok) return apiError("Too many requests", 429);
     const parsed = bidSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       const { message, field } = firstIssue(parsed.error);

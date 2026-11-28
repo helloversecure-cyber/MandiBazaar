@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return apiError("Please sign in to continue.", 401);
 
   const ip = clientIp(req);
-  const rl = rateLimit(`change-pw:${session.user.id}:${ip}`, 5, 60_000);
+  const rl = await rateLimit(`change-pw:${session.user.id}:${ip}`, 5, 60_000);
   if (!rl.ok) return apiError("Too many attempts. Try again in a minute.", 429);
 
   if (!firebaseAuthEnabled()) {
