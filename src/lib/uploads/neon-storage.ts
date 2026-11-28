@@ -1,4 +1,5 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { parsePrivateFileUrl } from "@/lib/uploads/private-files";
 
 /**
  * Neon Object Storage (built into Neon — no Amazon AWS account).
@@ -38,6 +39,15 @@ function getRegion() {
 
 function getBucket() {
   return env("NEON_STORAGE_BUCKET");
+}
+
+/** Private bucket for identity documents and proofs (see private-files.ts). */
+function getPrivateBucket() {
+  return env("NEON_STORAGE_PRIVATE_BUCKET");
+}
+
+export function neonPrivateStorageConfigured() {
+  return neonStorageConfigured() && Boolean(getPrivateBucket());
 }
 
 export function neonStorageConfigured() {
@@ -83,6 +93,8 @@ export function isOwnUploadUrl(url: string | null | undefined): boolean {
   const u = (url || "").trim();
   if (!u || u.length > 1000) return false;
   if (LOCAL_UPLOAD.test(u)) return true;
+  // A private file on our own site (/api/files/<private folder>/<file>).
+  if (parsePrivateFileUrl(u)) return true;
   if (!neonStorageConfigured()) return false;
   const base = neonPublicUrl(UPLOAD_PREFIX);
   if (!u.startsWith(base)) return false;
@@ -114,4 +126,43 @@ export async function uploadToNeonStorage(params: {
   );
 
   return { url: neonPublicUrl(key), key };
+}
+
+/** Store a private file (identity document, proof). Not publicly readable. */
+export async function uploadPrivateToNeonStorage(params: {
+  bytes: Buffer;
+  key: string;
+  mime: string;
+}): Promise<void> {
+  if (!neonPrivateStorageConfigured()) {
+    throw new Error("Private storage is not configured (NEON_STORAGE_PRIVATE_BUCKET)");
+  }
+  await getNeonClient().send(
+    new PutObjectCommand({
+      Bucket: getPrivateBucket(),
+      Key: params.key.replace(/^\//, ""),
+      Body: params.bytes,
+      ContentType: params.mime,
+      CacheControl: "private, no-store",
+    })
+  );
+}
+
+/** Read a private file, or null when it does not exist. */
+export async function readPrivateFromNeonStorage(
+  key: string
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (!neonPrivateStorageConfigured()) return null;
+  try {
+    const out = await getNeonClient().send(
+      new GetObjectCommand({ Bucket: getPrivateBucket(), Key: key.replace(/^\//, "") })
+    );
+    if (!out.Body) return null;
+    const bytes = await out.Body.transformToByteArray();
+    return { bytes, mime: out.ContentType || "application/octet-stream" };
+  } catch (e) {
+    const name = (e as { name?: string }).name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    throw e;
+  }
 }

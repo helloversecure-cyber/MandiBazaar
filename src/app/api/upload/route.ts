@@ -10,10 +10,18 @@ import {
   parseImageKind,
 } from "@/lib/uploads/optimize-image";
 import {
+  neonPrivateStorageConfigured,
   neonStorageConfigured,
+  uploadPrivateToNeonStorage,
   uploadToNeonStorage,
 } from "@/lib/uploads/neon-storage";
 import { canUploadToFolder } from "@/lib/uploads/upload-policy";
+import {
+  isPrivateFolder,
+  privateFileUrl,
+  privateKey,
+  privatePreviewUrl,
+} from "@/lib/uploads/private-files";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -120,6 +128,31 @@ export async function POST(req: NextRequest) {
 
     const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${optimized.ext}`;
     const key = `mandibazaar/${folder}/${name}`;
+
+    // Identity documents and proofs: private bucket, served by /api/files
+    // after an access check. The preview link lets the uploader show it
+    // straight away (sign-up forms have no account yet).
+    if (isPrivateFolder(folder) && neonPrivateStorageConfigured()) {
+      try {
+        await uploadPrivateToNeonStorage({ bytes: optimized.buffer, key: privateKey(folder, name), mime: optimized.mime });
+        return apiSuccess({
+          url: privateFileUrl(folder, name),
+          previewUrl: privatePreviewUrl(folder, name),
+          publicId: privateKey(folder, name),
+          via: "neon-private",
+          kind: optimized.kind,
+          bytes: optimized.bytes,
+          width: optimized.width,
+          height: optimized.height,
+        });
+      } catch (e) {
+        console.error("[upload:neon-private]", e);
+        return apiError(UPLOAD_FAILED, 400);
+      }
+    }
+    if (isPrivateFolder(folder) && neonStorageConfigured()) {
+      console.warn("[upload] NEON_STORAGE_PRIVATE_BUCKET not set: private document stored publicly");
+    }
 
     // Production / Vercel: Neon Object Storage is required (ephemeral disk).
     if (process.env.VERCEL || process.env.NODE_ENV === "production") {
