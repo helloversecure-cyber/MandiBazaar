@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Settings,
   ScrollText,
+  ShieldCheck,
   Warehouse,
   RotateCcw,
   Store,
@@ -114,6 +115,7 @@ function buildGroups(c: ReviewCounts | null): NavGroup[] {
       items: [
         { href: "/admin/settings", label: "Settings", icon: Settings },
         { href: "/admin/audit-logs", label: "Audit Logs", short: "Logs", icon: ScrollText },
+        { href: "/admin/private-files", label: "Private documents", short: "Docs", icon: ShieldCheck },
       ],
     },
   ];
