@@ -29,6 +29,10 @@ export function ImageUploadField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  // Private documents come back with a short-lived preview link: the saved
+  // link needs a signed-in owner, which a sign-up form does not have yet.
+  const [preview, setPreview] = useState<{ url: string; src: string } | null>(null);
+  const shown = value && preview?.url === value ? preview.src : value;
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -45,6 +49,7 @@ export function ImageUploadField({
         setError(data.error || "Upload failed");
         return;
       }
+      setPreview(data.data.previewUrl ? { url: data.data.url, src: data.data.previewUrl } : null);
       onChange(data.data.url);
     } catch {
       setError("Upload failed");
@@ -105,7 +110,7 @@ export function ImageUploadField({
       {value && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={value}
+          src={shown}
           alt={label}
           className="mt-3 h-28 w-auto max-w-full rounded-xl border border-surface-border object-cover"
         />
