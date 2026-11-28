@@ -2,6 +2,10 @@ import { requireSuperAdmin } from "@/lib/auth/auth";
 import { apiError, apiSuccess, toUserMessage } from "@/lib/utils";
 import { adminFinanceOverview } from "@/lib/finance/admin-dashboard";
 
+/** Per-user data: always rendered per request (also keeps the build log free of
+ * "Dynamic server usage" noise from the error handler below). */
+export const dynamic = "force-dynamic";
+
 /** Platform-wide financial control center (Super Admin only — enforced on the backend). */
 export async function GET() {
   try {

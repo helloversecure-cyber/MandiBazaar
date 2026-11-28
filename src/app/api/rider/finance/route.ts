@@ -2,6 +2,10 @@ import { requireRider } from "@/lib/auth/auth";
 import { apiError, apiSuccess, toUserMessage } from "@/lib/utils";
 import { riderFinanceDashboard } from "@/lib/finance/rider-dashboard";
 
+/** Per-user data: always rendered per request (also keeps the build log free of
+ * "Dynamic server usage" noise from the error handler below). */
+export const dynamic = "force-dynamic";
+
 function csvEscape(v: unknown): string {
   const s = v == null ? "" : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
