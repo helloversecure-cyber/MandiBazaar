@@ -15,7 +15,7 @@ const APP_PORTALS = new Set(["customer", "store", "rider"]);
  * Body: { identifier, password, portal: "customer" | "store" | "rider", deviceName? }
  */
 export async function POST(req: Request) {
-  const rl = rateLimit(`mobile-login:${clientIp(req)}`, 20, 60_000);
+  const rl = await rateLimit(`mobile-login:${clientIp(req)}`, 20, 60_000);
   if (!rl.ok) return apiError("Too many sign-in attempts. Please wait a minute and try again.", 429, "RATE_LIMITED");
 
   let body: { identifier?: unknown; password?: unknown; portal?: unknown; deviceName?: unknown };

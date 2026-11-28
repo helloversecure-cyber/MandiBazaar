@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) return apiError("Unauthorized", 401);
     if (!ROLES.includes(session.user.role || "")) return apiError("Forbidden", 403);
 
-    const rl = rateLimit(`verify-image:${session.user.id}:${clientIp(req)}`, 20, 10 * 60 * 1000);
+    const rl = await rateLimit(`verify-image:${session.user.id}:${clientIp(req)}`, 20, 10 * 60 * 1000);
     if (!rl.ok) {
       return apiError("Too many photo checks. Please wait a few minutes.", 429);
     }

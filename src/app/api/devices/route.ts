@@ -15,7 +15,7 @@ const schema = z.object({
 export async function POST(req: Request) {
   try {
     const session = await requireAuth();
-    const rl = rateLimit(`devices:${session.user.id}`, 30, 60_000);
+    const rl = await rateLimit(`devices:${session.user.id}`, 30, 60_000);
     if (!rl.ok) return apiError("Too many requests", 429);
     const parsed = schema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return apiError(parsed.error.issues[0]?.message || "Invalid request", 400);

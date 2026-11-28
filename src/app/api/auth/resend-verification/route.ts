@@ -10,7 +10,7 @@ import { sendSignupVerificationEmail } from "@/lib/auth/firebase-signup";
  */
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  const rl = rateLimit(`resend-verify:${ip}`, 5, 60_000);
+  const rl = await rateLimit(`resend-verify:${ip}`, 5, 60_000);
   if (!rl.ok) return apiError("Too many requests. Please wait a minute.", 429);
 
   const neutral = apiSuccess({ message: "If the account needs verification, we’ve sent a new link." });

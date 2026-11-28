@@ -20,7 +20,7 @@ function str(v: unknown, max: number): string {
 export async function POST(req: NextRequest) {
   const done = () => new Response(null, { status: 204 });
   try {
-    if (!rateLimit(`client-error:${clientIp(req)}`, 5, 60_000).ok) return done();
+    if (!(await rateLimit(`client-error:${clientIp(req)}`, 5, 60_000)).ok) return done();
     const origin = req.headers.get("origin");
     if (origin && origin !== req.nextUrl.origin) return done();
     const raw = await req.text();

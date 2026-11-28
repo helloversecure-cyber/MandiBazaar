@@ -16,7 +16,7 @@ import { deleteFirebaseUser } from "@/lib/firebase/admin";
 
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  const rl = rateLimit(`register:${ip}`, 10, 60_000);
+  const rl = await rateLimit(`register:${ip}`, 10, 60_000);
   if (!rl.ok) return apiError("Too many requests. Please try again later.", 429);
 
   let uid: string | null = null;

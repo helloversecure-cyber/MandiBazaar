@@ -20,7 +20,7 @@ function handle(e: unknown) {
 export async function POST(req: Request) {
   try {
     const session = await requireAuth();
-    const rl = rateLimit(`bid-open:${session.user.id}`, 20, 60_000);
+    const rl = await rateLimit(`bid-open:${session.user.id}`, 20, 60_000);
     if (!rl.ok) return apiError("Please wait a moment before trying again.", 429);
     const body = (await req.json().catch(() => ({}))) as { addressId?: unknown };
     if (typeof body.addressId !== "string" || !body.addressId) {
@@ -48,7 +48,7 @@ export async function GET() {
 export async function PATCH(req: Request) {
   try {
     const session = await requireAuth();
-    const rl = rateLimit(`bid-accept:${session.user.id}`, 30, 60_000);
+    const rl = await rateLimit(`bid-accept:${session.user.id}`, 30, 60_000);
     if (!rl.ok) return apiError("Please wait a moment before trying again.", 429);
     const body = (await req.json().catch(() => ({}))) as { action?: string; bidId?: string; requestId?: string };
     if (body.action === "accept") {

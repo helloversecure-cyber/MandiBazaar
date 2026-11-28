@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: Request) {
   try {
     const { rider } = await requireRider();
-    const rl = rateLimit(`bid-submit:${rider.id}`, 60, 60_000);
+    const rl = await rateLimit(`bid-submit:${rider.id}`, 60, 60_000);
     if (!rl.ok) return apiError("Please slow down a little.", 429);
     const body = (await req.json().catch(() => ({}))) as { requestId?: string; amount?: unknown; note?: string };
     if (!body.requestId) return apiError("Missing delivery request.", 400);
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const { rider } = await requireRider();
-    const rl = rateLimit(`bid-submit:${rider.id}`, 60, 60_000);
+    const rl = await rateLimit(`bid-submit:${rider.id}`, 60, 60_000);
     if (!rl.ok) return apiError("Please slow down a little.", 429);
     const fromQuery = new URL(req.url).searchParams.get("requestId");
     const body = fromQuery ? {} : ((await req.json().catch(() => ({}))) as { requestId?: string });

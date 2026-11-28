@@ -64,13 +64,13 @@ export async function POST(req: NextRequest) {
 
     // Rate limit: tighter for guests (signup docs), higher for signed-in users.
     const rl = userId
-      ? rateLimit(`upload:user:${userId}`, 30, 60_000)
-      : rateLimit(`upload:ip:${ip}`, 8, 60_000);
+      ? await rateLimit(`upload:user:${userId}`, 30, 60_000)
+      : await rateLimit(`upload:ip:${ip}`, 8, 60_000);
     if (!rl.ok) {
       return apiError("Too many uploads. Please wait a minute and try again.", 429);
     }
     // Shared IP ceiling even when authenticated (shared NAT abuse).
-    const ipRl = rateLimit(`upload:ip-all:${ip}`, 40, 60_000);
+    const ipRl = await rateLimit(`upload:ip-all:${ip}`, 40, 60_000);
     if (!ipRl.ok) {
       return apiError("Too many uploads from this network. Please wait.", 429);
     }

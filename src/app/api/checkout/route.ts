@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const session = await getSession();
   if (!session?.user?.id) return apiError("Please sign in to checkout", 401);
 
-  const rl = rateLimit(`checkout:${session.user.id}`, 10, 60_000);
+  const rl = await rateLimit(`checkout:${session.user.id}`, 10, 60_000);
   if (!rl.ok) return apiError("Too many checkout attempts. Please wait.", 429);
 
   try {

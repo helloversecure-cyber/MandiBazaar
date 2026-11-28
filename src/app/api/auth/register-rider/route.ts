@@ -19,7 +19,7 @@ import { deleteFirebaseUser } from "@/lib/firebase/admin";
 /** Rider self-signup with docs — MandiBazaar must approve before deliveries. */
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  const rl = rateLimit(`rider-register:${ip}`, 8, 60_000);
+  const rl = await rateLimit(`rider-register:${ip}`, 8, 60_000);
   if (!rl.ok) return apiError("Too many requests. Please try again later.", 429);
 
   let uid: string | null = null;

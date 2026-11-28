@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** Exchange a refresh token for a new access + refresh token pair. Body: { refreshToken } */
 export async function POST(req: Request) {
-  const rl = rateLimit(`mobile-refresh:${clientIp(req)}`, 60, 60_000);
+  const rl = await rateLimit(`mobile-refresh:${clientIp(req)}`, 60, 60_000);
   if (!rl.ok) return apiError("Too many requests", 429, "RATE_LIMITED");
 
   let raw = "";

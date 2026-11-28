@@ -17,7 +17,7 @@ type Ctx = { params: { orderNumber: string; bidId: string } };
 export async function POST(req: Request, { params }: Ctx) {
   try {
     const session = await requireAuth();
-    if (!rateLimit(`rider-bid-accept:${session.user.id}`, 20, 60_000).ok) return apiError("Too many requests", 429);
+    if (!(await rateLimit(`rider-bid-accept:${session.user.id}`, 20, 60_000)).ok) return apiError("Too many requests", 429);
     const parsed = acceptRiderBidSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       const issue = parsed.error.issues[0];

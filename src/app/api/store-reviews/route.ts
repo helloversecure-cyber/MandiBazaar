@@ -44,7 +44,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await requireAuth();
-    const rl = rateLimit(`store-review:${session.user.id}`, 10, 60_000);
+    const rl = await rateLimit(`store-review:${session.user.id}`, 10, 60_000);
     if (!rl.ok) return apiError("Too many ratings — please wait a minute.", 429);
     const parsed = storeReviewSchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return apiZodError(parsed.error);
