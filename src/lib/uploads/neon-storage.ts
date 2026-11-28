@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { parsePrivateFileUrl } from "@/lib/uploads/private-files";
 
 /**
@@ -165,4 +165,35 @@ export async function readPrivateFromNeonStorage(
     if (name === "NoSuchKey" || name === "NotFound") return null;
     throw e;
   }
+}
+
+/** Object key in the public bucket for one of its public URLs, else null. */
+export function publicKeyFromUrl(url: string | null | undefined): string | null {
+  const u = (url || "").trim();
+  if (!u || !neonStorageConfigured()) return null;
+  const base = neonPublicUrl("");
+  if (!u.startsWith(base)) return null;
+  const key = u.slice(base.length);
+  return /^mandibazaar\/[a-z0-9_-]+\/[A-Za-z0-9_-]+\.[a-z0-9]{2,5}$/i.test(key) ? key : null;
+}
+
+/** Read an object from the public bucket, or null when it does not exist. */
+export async function readPublicFromNeonStorage(
+  key: string
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (!neonStorageConfigured()) return null;
+  try {
+    const out = await getNeonClient().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }));
+    if (!out.Body) return null;
+    return { bytes: await out.Body.transformToByteArray(), mime: out.ContentType || "application/octet-stream" };
+  } catch (e) {
+    const name = (e as { name?: string }).name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    throw e;
+  }
+}
+
+/** Delete an object from the public bucket. */
+export async function deletePublicFromNeonStorage(key: string): Promise<void> {
+  await getNeonClient().send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
 }
